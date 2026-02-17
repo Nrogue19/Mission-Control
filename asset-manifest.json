@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/Mission-Control/static/css/main.8b36f75d.css",
+    "main.js": "/Mission-Control/static/js/main.cd633869.js",
+    "static/js/453.6c19e05d.chunk.js": "/Mission-Control/static/js/453.6c19e05d.chunk.js",
+    "index.html": "/Mission-Control/index.html",
+    "main.8b36f75d.css.map": "/Mission-Control/static/css/main.8b36f75d.css.map",
+    "main.cd633869.js.map": "/Mission-Control/static/js/main.cd633869.js.map",
+    "453.6c19e05d.chunk.js.map": "/Mission-Control/static/js/453.6c19e05d.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.8b36f75d.css",
+    "static/js/main.cd633869.js"
+  ]
+}
