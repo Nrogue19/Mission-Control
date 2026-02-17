@@ -262,7 +262,8 @@
 
         /* Left Sidebar - Agents */
         .agents-sidebar {
-            width: 200px;
+            width: clamp(260px, 22vw, 320px);
+            min-width: 260px;
             background: white;
             border-right: 1px solid #e5e7eb;
             overflow-y: auto;
@@ -1674,6 +1675,8 @@
                 position: fixed;
                 left: -100%;
                 top: 0;
+                width: min(88vw, 340px);
+                min-width: 0;
                 height: 100vh;
                 z-index: 1000;
                 transition: left 0.3s ease;

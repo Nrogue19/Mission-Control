@@ -45,16 +45,47 @@ const CONNECTION_STATUS = {
   DISABLED: 'disabled'
 };
 
-const getChatTimestamp = () => new Date().toLocaleTimeString('en-US', {
+const chatTimeFormatter = new Intl.DateTimeFormat('en-US', {
   hour: '2-digit',
   minute: '2-digit',
   hour12: false
 });
 
+const getChatTimestamp = () => chatTimeFormatter.format(new Date());
+
+const normalizeTaskId = (value) => String(value ?? '').trim();
+
+const taskIdsMatch = (left, right) => normalizeTaskId(left) === normalizeTaskId(right);
+
 const EMPTY_CONFIGURATION_VALIDATOR = {
   healthScore: 0,
   issues: [],
   validatedFiles: []
+};
+
+const EMPTY_TOKEN_USAGE = {
+  today: 0,
+  cost: 0,
+  budget: 25,
+  topConsumers: [],
+  weeklyTrend: [0, 0, 0, 0, 0, 0, 0],
+  suggestions: ['Waiting for live token usage data...']
+};
+
+const EMPTY_SECURITY = {
+  score: 100,
+  alerts: [],
+  apiKeys: [],
+  recentActivity: []
+};
+
+const EMPTY_HEALTH = {
+  healthy: 0,
+  degraded: 0,
+  down: 0,
+  systemHealth: [],
+  recentErrors: [],
+  agents: []
 };
 
 // Dark Mode Toggle Component
@@ -395,6 +426,9 @@ const FilesSection = ({ files, onFileView }) => {
 const AgentsSidebar = ({
   agents,
   files,
+  tokenUsageData,
+  securityData,
+  healthData,
   onFileView,
   isOpen,
   onClose,
@@ -414,15 +448,18 @@ const AgentsSidebar = ({
     </div>
     <FilesSection files={files} onFileView={onFileView} />
     <TokenUsageMonitor
+      data={tokenUsageData}
       isExpanded={expandedMonitor === 'token'}
       onToggle={() => onToggleMonitor('token')}
     />
     <SecurityDashboard
+      data={securityData}
       isExpanded={expandedMonitor === 'security'}
       onToggle={() => onToggleMonitor('security')}
     />
     <AgentHealthMonitor
       agents={agents}
+      data={healthData}
       isExpanded={expandedMonitor === 'health'}
       onToggle={() => onToggleMonitor('health')}
     />
@@ -515,7 +552,7 @@ const KanbanColumn = ({
           <TaskCard
             key={task.id}
             task={task}
-            onDragStart={(e) => e.dataTransfer.setData('taskId', task.id)}
+            onDragStart={(e) => e.dataTransfer.setData('taskId', String(task.id))}
             onDragEnd={(e) => e.currentTarget.classList.remove('dragging')}
             onClick={() => onTaskClick(task)}
             isInteractionLocked={isInteractionLocked}
@@ -955,6 +992,9 @@ const MissionControl = () => {
   const [configurationValidatorState, setConfigurationValidatorState] = useState(
     () => (shouldUseSeedData ? configurationValidatorData : EMPTY_CONFIGURATION_VALIDATOR)
   );
+  const [tokenUsageState, setTokenUsageState] = useState(EMPTY_TOKEN_USAGE);
+  const [securityState, setSecurityState] = useState(EMPTY_SECURITY);
+  const [healthState, setHealthState] = useState(EMPTY_HEALTH);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedMode = window.localStorage.getItem(DARK_MODE_STORAGE_KEY);
@@ -1065,6 +1105,18 @@ const MissionControl = () => {
       setConfigurationValidatorState(snapshot.configurationValidator);
     }
 
+    if (snapshot.tokenUsage && typeof snapshot.tokenUsage === 'object') {
+      setTokenUsageState(snapshot.tokenUsage);
+    }
+
+    if (snapshot.security && typeof snapshot.security === 'object') {
+      setSecurityState(snapshot.security);
+    }
+
+    if (snapshot.health && typeof snapshot.health === 'object') {
+      setHealthState(snapshot.health);
+    }
+
     if (typeof snapshot.emergencyMode === 'string' && Object.values(EMERGENCY_MODE).includes(snapshot.emergencyMode)) {
       setEmergencyMode(snapshot.emergencyMode);
     }
@@ -1116,6 +1168,7 @@ const MissionControl = () => {
     };
 
     hydrateMissionSnapshot();
+    const refreshInterval = window.setInterval(hydrateMissionSnapshot, 30000);
 
     const realtimeClient = createOpenClawRealtimeClient({
       onStatusChange: (status) => {
@@ -1176,6 +1229,7 @@ const MissionControl = () => {
 
     return () => {
       isMounted = false;
+      window.clearInterval(refreshInterval);
       realtimeClient.disconnect();
     };
   }, [applyMissionSnapshot, reportIntegrationError]);
@@ -1276,11 +1330,16 @@ const MissionControl = () => {
     }
 
     e.preventDefault();
-    const taskId = parseInt(e.dataTransfer.getData('taskId'));
+    const taskId = normalizeTaskId(e.dataTransfer.getData('taskId'));
+
+    if (!taskId) {
+      e.currentTarget.classList.remove('drag-over');
+      return;
+    }
     
     setTasks(prevTasks =>
       prevTasks.map(task =>
-        task.id === taskId ? { ...task, column: newColumn } : task
+        taskIdsMatch(task.id, taskId) ? { ...task, column: newColumn } : task
       )
     );
 
@@ -1311,7 +1370,7 @@ const MissionControl = () => {
   const handleSaveTask = (updatedTask) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
-        task.id === updatedTask.id ? updatedTask : task
+        taskIdsMatch(task.id, updatedTask.id) ? updatedTask : task
       )
     );
 
@@ -1323,7 +1382,7 @@ const MissionControl = () => {
   };
 
   const handleDeleteTask = (taskId) => {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+    setTasks(prevTasks => prevTasks.filter(task => !taskIdsMatch(task.id, taskId)));
 
     if (runtimeConfig.liveDataEnabled) {
       deleteTaskById(taskId).catch(reportIntegrationError);
@@ -1436,6 +1495,9 @@ const MissionControl = () => {
         <AgentsSidebar 
           agents={agents} 
           files={files} 
+          tokenUsageData={tokenUsageState}
+          securityData={securityState}
+          healthData={healthState}
           onFileView={handleFileView}
           isOpen={sidebarOpen}
           onClose={toggleSidebar}

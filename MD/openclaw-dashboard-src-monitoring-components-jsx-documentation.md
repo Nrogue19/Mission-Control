@@ -10,7 +10,9 @@ Houses the dashboard monitoring widgets for token consumption, security status, 
 - `TokenUsageMonitor` component
 - `SecurityDashboard` component
 - `AgentHealthMonitor` component
-- Simulated state updates and monitoring summaries
+- Data normalization and fallback defaults for token/security/health payloads
+- Alert dismissal behavior in security panel
+- Live health rendering based on backend snapshot telemetry (no random simulated updates)
 
 ## When to Update
 Update when monitoring UI, metrics, or alert behavior changes.

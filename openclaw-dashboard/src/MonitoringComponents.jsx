@@ -1,25 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
-// Token Usage Monitor Component
-export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
-  const [tokenData] = useState({
-    today: 1200000,
-    cost: 18.50,
-    budget: 25.00,
-    topConsumers: [
-      { agent: 'Jarvis', tokens: 450000, cost: 6.75, color: '#ec4899' },
-      { agent: 'Friday', tokens: 320000, cost: 4.80, color: '#f59e0b' },
-      { agent: 'Vision', tokens: 280000, cost: 4.20, color: '#6366f1' }
-    ],
-    weeklyTrend: [800000, 950000, 1100000, 1300000, 1200000, 1400000, 1200000]
-  });
+const DEFAULT_TOKEN_USAGE = {
+  today: 0,
+  cost: 0,
+  budget: 25,
+  topConsumers: [],
+  weeklyTrend: [0, 0, 0, 0, 0, 0, 0],
+  suggestions: ['Waiting for live token usage data...']
+};
+
+const DEFAULT_SECURITY = {
+  score: 100,
+  alerts: [],
+  apiKeys: [],
+  recentActivity: []
+};
+
+const DEFAULT_HEALTH = {
+  healthy: 0,
+  degraded: 0,
+  down: 0,
+  systemHealth: [],
+  recentErrors: [],
+  agents: []
+};
+
+const toNumber = (value, fallback = 0) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const getScoreColor = (score) => {
+  if (score >= 80) return '#10b981';
+  if (score >= 60) return '#f59e0b';
+  return '#ef4444';
+};
+
+const getSeverityColor = (severity) => {
+  if (severity === 'high') return '#ef4444';
+  if (severity === 'medium') return '#f59e0b';
+  return '#3b82f6';
+};
+
+const getHealthColor = (health) => {
+  if (health === 'healthy') return '#10b981';
+  if (health === 'degraded' || health === 'idle') return '#f59e0b';
+  return '#ef4444';
+};
+
+export const TokenUsageMonitor = ({ data, isExpanded, onToggle }) => {
+  const tokenData = useMemo(() => {
+    const incomingData = data && typeof data === 'object' ? data : DEFAULT_TOKEN_USAGE;
+
+    return {
+      ...DEFAULT_TOKEN_USAGE,
+      ...incomingData,
+      today: toNumber(incomingData.today, DEFAULT_TOKEN_USAGE.today),
+      cost: toNumber(incomingData.cost, DEFAULT_TOKEN_USAGE.cost),
+      budget: Math.max(1, toNumber(incomingData.budget, DEFAULT_TOKEN_USAGE.budget)),
+      topConsumers: Array.isArray(incomingData.topConsumers) ? incomingData.topConsumers : [],
+      weeklyTrend: Array.isArray(incomingData.weeklyTrend) && incomingData.weeklyTrend.length > 0
+        ? incomingData.weeklyTrend
+        : DEFAULT_TOKEN_USAGE.weeklyTrend,
+      suggestions: Array.isArray(incomingData.suggestions) && incomingData.suggestions.length > 0
+        ? incomingData.suggestions
+        : DEFAULT_TOKEN_USAGE.suggestions
+    };
+  }, [data]);
 
   const budgetPercent = (tokenData.cost / tokenData.budget) * 100;
-  const getBudgetColor = () => {
-    if (budgetPercent >= 90) return '#ef4444';
-    if (budgetPercent >= 75) return '#f59e0b';
-    return '#10b981';
-  };
+  const budgetColor = getScoreColor(100 - Math.min(100, budgetPercent));
+  const trendMaxValue = Math.max(...tokenData.weeklyTrend, 1);
 
   return (
     <div className="monitor-section">
@@ -30,16 +81,16 @@ export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
         </div>
         <span className={`monitor-toggle ${isExpanded ? 'open' : ''}`}>▼</span>
       </div>
-      
+
       {isExpanded && (
         <div className="monitor-content">
           <div className="token-summary">
             <div className="token-stat">
-              <div className="token-value">{(tokenData.today / 1000000).toFixed(1)}M</div>
+              <div className="token-value">{(tokenData.today / 1000000).toFixed(2)}M</div>
               <div className="token-label">Tokens Today</div>
             </div>
             <div className="token-stat">
-              <div className="token-value" style={{ color: getBudgetColor() }}>
+              <div className="token-value" style={{ color: budgetColor }}>
                 ${tokenData.cost.toFixed(2)}
               </div>
               <div className="token-label">Cost Today</div>
@@ -47,9 +98,9 @@ export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
           </div>
 
           <div className="budget-bar">
-            <div className="budget-fill" style={{ 
+            <div className="budget-fill" style={{
               width: `${Math.min(budgetPercent, 100)}%`,
-              background: getBudgetColor()
+              background: budgetColor
             }}></div>
           </div>
           <div className="budget-text">
@@ -58,26 +109,28 @@ export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
 
           <div className="top-consumers">
             <div className="section-label">Top Consumers</div>
-            {tokenData.topConsumers.map((consumer, idx) => (
-              <div key={idx} className="consumer-item">
-                <div className="consumer-avatar" style={{ background: consumer.color }}>
-                  {consumer.agent[0]}
+            {tokenData.topConsumers.length > 0 ? tokenData.topConsumers.map((consumer, idx) => (
+              <div key={`${consumer.agent}-${idx}`} className="consumer-item">
+                <div className="consumer-avatar" style={{ background: consumer.color || '#6366f1' }}>
+                  {String(consumer.agent || '?').charAt(0)}
                 </div>
                 <div className="consumer-info">
                   <div className="consumer-name">{consumer.agent}</div>
                   <div className="consumer-usage">
-                    {(consumer.tokens / 1000).toFixed(0)}K tokens • ${consumer.cost.toFixed(2)}
+                    {(toNumber(consumer.tokens) / 1000).toFixed(0)}K tokens • ${toNumber(consumer.cost).toFixed(2)}
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="activity-item-small">No token consumers reported yet.</div>
+            )}
           </div>
 
           <div className="trend-chart">
             <div className="section-label">7 Day Trend</div>
             <div className="mini-chart">
               {tokenData.weeklyTrend.map((value, idx) => {
-                const height = (value / Math.max(...tokenData.weeklyTrend)) * 100;
+                const height = (toNumber(value) / trendMaxValue) * 100;
                 return (
                   <div key={idx} className="chart-bar" style={{ height: `${height}%` }}></div>
                 );
@@ -91,12 +144,11 @@ export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
 
           <div className="suggestions">
             <div className="section-label">💡 Suggestions</div>
-            <div className="suggestion-item">
-              • Switch Jarvis to Claude Sonnet (-40% cost)
-            </div>
-            <div className="suggestion-item">
-              • Reduce Friday's context window (-20% tokens)
-            </div>
+            {tokenData.suggestions.map((suggestion, index) => (
+              <div key={`${suggestion}-${index}`} className="suggestion-item">
+                • {suggestion}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -104,42 +156,27 @@ export const TokenUsageMonitor = ({ isExpanded, onToggle }) => {
   );
 };
 
-// Security Dashboard Component
-export const SecurityDashboard = ({ isExpanded, onToggle }) => {
-  const [securityData] = useState({
-    score: 85,
-    alerts: [
-      { severity: 'high', message: 'API Key exposed in logs', action: 'Fix Now' },
-      { severity: 'medium', message: 'Untrusted skill "WebScraper"', action: 'Review' }
-    ],
-    apiKeys: [
-      { name: 'OpenAI', status: 'active', expires: '30d', exposed: false },
-      { name: 'Anthropic', status: 'active', expires: '45d', exposed: false },
-      { name: 'Google', status: 'warning', expires: '15d', exposed: true }
-    ],
-    skills: [
-      { name: 'EmailSender', rating: 5, safe: true },
-      { name: 'WebScraper', rating: 3, safe: false },
-      { name: 'FileManager', rating: 5, safe: true }
-    ],
-    recentActivity: [
-      { time: '2 min ago', agent: 'Jarvis', action: 'accessed Gmail API' },
-      { time: '5 min ago', agent: 'Friday', action: 'read USER.md' },
-      { time: '8 min ago', agent: 'Vision', action: 'made external API call' }
-    ]
-  });
+export const SecurityDashboard = ({ data, isExpanded, onToggle }) => {
+  const securityData = useMemo(() => {
+    const incomingData = data && typeof data === 'object' ? data : DEFAULT_SECURITY;
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return '#10b981';
-    if (score >= 60) return '#f59e0b';
-    return '#ef4444';
-  };
+    return {
+      ...DEFAULT_SECURITY,
+      ...incomingData,
+      score: Math.max(0, Math.min(100, toNumber(incomingData.score, DEFAULT_SECURITY.score))),
+      alerts: Array.isArray(incomingData.alerts) ? incomingData.alerts : [],
+      apiKeys: Array.isArray(incomingData.apiKeys) ? incomingData.apiKeys : [],
+      recentActivity: Array.isArray(incomingData.recentActivity) ? incomingData.recentActivity : []
+    };
+  }, [data]);
 
-  const getSeverityColor = (severity) => {
-    if (severity === 'high') return '#ef4444';
-    if (severity === 'medium') return '#f59e0b';
-    return '#3b82f6';
-  };
+  const [dismissedAlertIndexes, setDismissedAlertIndexes] = useState([]);
+
+  useEffect(() => {
+    setDismissedAlertIndexes([]);
+  }, [securityData.alerts]);
+
+  const visibleAlerts = securityData.alerts.filter((_, index) => !dismissedAlertIndexes.includes(index));
 
   return (
     <div className="monitor-section">
@@ -176,44 +213,57 @@ export const SecurityDashboard = ({ isExpanded, onToggle }) => {
             <div className="score-label">Security Score</div>
           </div>
 
-          {securityData.alerts.length > 0 && (
+          {visibleAlerts.length > 0 && (
             <div className="security-alerts">
               <div className="section-label">⚠️ Alerts</div>
-              {securityData.alerts.map((alert, idx) => (
-                <div key={idx} className="alert-item" style={{ 
-                  borderLeftColor: getSeverityColor(alert.severity)
-                }}>
-                  <div className="alert-message">{alert.message}</div>
-                  <button className="alert-action">{alert.action}</button>
-                </div>
-              ))}
+              {visibleAlerts.map((alert, idx) => {
+                const originalIndex = securityData.alerts.findIndex((candidate) => candidate === alert);
+
+                return (
+                  <div key={`${alert.message || 'alert'}-${idx}`} className="alert-item" style={{
+                    borderLeftColor: getSeverityColor(alert.severity)
+                  }}>
+                    <div className="alert-message">{alert.message}</div>
+                    <button
+                      className="alert-action"
+                      onClick={() => setDismissedAlertIndexes((current) => [...current, originalIndex])}
+                    >
+                      {alert.action || 'Resolve'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           <div className="api-keys">
             <div className="section-label">🔑 API Keys</div>
-            {securityData.apiKeys.map((key, idx) => (
-              <div key={idx} className="api-key-item">
+            {securityData.apiKeys.length > 0 ? securityData.apiKeys.map((key, idx) => (
+              <div key={`${key.name || 'key'}-${idx}`} className="api-key-item">
                 <div className="key-info">
                   <div className="key-name">
                     {key.exposed ? '⚠️' : '✅'} {key.name}
                   </div>
-                  <div className="key-expires">Expires: {key.expires}</div>
+                  <div className="key-expires">Expires: {key.expires || 'n/a'}</div>
                 </div>
                 {key.exposed && (
                   <button className="key-action danger">REVOKE</button>
                 )}
               </div>
-            ))}
+            )) : (
+              <div className="activity-item-small">No key status data available.</div>
+            )}
           </div>
 
           <div className="recent-activity-security">
             <div className="section-label">📊 Recent Activity</div>
-            {securityData.recentActivity.slice(0, 3).map((activity, idx) => (
-              <div key={idx} className="activity-item-small">
+            {securityData.recentActivity.length > 0 ? securityData.recentActivity.slice(0, 3).map((activity, idx) => (
+              <div key={`${activity.action || 'activity'}-${idx}`} className="activity-item-small">
                 • {activity.time}: {activity.agent} {activity.action}
               </div>
-            ))}
+            )) : (
+              <div className="activity-item-small">No security events in the current window.</div>
+            )}
           </div>
         </div>
       )}
@@ -221,58 +271,39 @@ export const SecurityDashboard = ({ isExpanded, onToggle }) => {
   );
 };
 
-// Agent Health Monitor Component
-export const AgentHealthMonitor = ({ agents, isExpanded, onToggle }) => {
-  const [healthData, setHealthData] = useState({
-    healthy: 9,
-    degraded: 2,
-    down: 0,
-    systemHealth: [
-      { name: 'OpenAI API', status: 'operational', latency: '120ms' },
-      { name: 'Anthropic API', status: 'operational', latency: '95ms' },
-      { name: 'Database', status: 'connected', latency: '12%' },
-      { name: 'File System', status: 'accessible', latency: '45%' }
-    ],
-    recentErrors: [
-      { agent: 'Friday', error: 'Timeout on OpenAI call', count: 3 },
-      { agent: 'Vision', error: 'Failed to read CRON.md', count: 1 }
-    ]
-  });
+export const AgentHealthMonitor = ({ agents, data, isExpanded, onToggle }) => {
+  const normalizedHealthData = useMemo(() => {
+    const incomingData = data && typeof data === 'object' ? data : DEFAULT_HEALTH;
+    const fallbackAgents = Array.isArray(agents) ? agents : [];
 
-  // Simulate real-time updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Update health data (in real app, this would come from WebSocket)
-      setHealthData(prev => ({
-        ...prev,
-        systemHealth: prev.systemHealth.map(sys => ({
-          ...sys,
-          latency: sys.name.includes('API') 
-            ? `${Math.floor(Math.random() * 50 + 80)}ms`
-            : sys.latency
-        }))
-      }));
-    }, 5000);
+    const derivedAgents = fallbackAgents.map((agent) => ({
+      name: agent.name,
+      health: agent.status === 'awake' ? 'healthy' : 'idle',
+      lastHeartbeat: agent.status === 'awake' ? 'just now' : '1m ago',
+      responseTime: agent.status === 'awake' ? '180ms' : '1.1s',
+      successRate: agent.status === 'awake' ? 98 : 88,
+      cpuUsage: agent.status === 'awake' ? 18 : 42,
+      tasks: agent.status === 'awake' ? '2/5' : '0/5'
+    }));
 
-    return () => clearInterval(interval);
-  }, []);
+    const agentsWithHealth = Array.isArray(incomingData.agents) && incomingData.agents.length > 0
+      ? incomingData.agents
+      : derivedAgents;
 
-  // Add health status to agents
-  const agentsWithHealth = agents.map(agent => ({
-    ...agent,
-    health: agent.status === 'awake' ? 'healthy' : 'idle',
-    lastHeartbeat: agent.status === 'awake' ? '2s ago' : '45s ago',
-    responseTime: agent.status === 'awake' ? '234ms' : '1.2s',
-    successRate: agent.status === 'awake' ? 98 : 87,
-    cpuUsage: agent.status === 'awake' ? 12 : 45,
-    tasks: agent.status === 'awake' ? '3/5' : '0/5'
-  }));
+    const healthy = incomingData.healthy ?? agentsWithHealth.filter((agent) => agent.health === 'healthy').length;
+    const degraded = incomingData.degraded ?? agentsWithHealth.filter((agent) => agent.health !== 'healthy').length;
 
-  const getHealthColor = (health) => {
-    if (health === 'healthy') return '#10b981';
-    if (health === 'degraded' || health === 'idle') return '#f59e0b';
-    return '#ef4444';
-  };
+    return {
+      ...DEFAULT_HEALTH,
+      ...incomingData,
+      healthy,
+      degraded,
+      down: incomingData.down ?? Math.max(0, agentsWithHealth.length - healthy - degraded),
+      systemHealth: Array.isArray(incomingData.systemHealth) ? incomingData.systemHealth : [],
+      recentErrors: Array.isArray(incomingData.recentErrors) ? incomingData.recentErrors : [],
+      agents: agentsWithHealth
+    };
+  }, [agents, data]);
 
   return (
     <div className="monitor-section">
@@ -289,29 +320,29 @@ export const AgentHealthMonitor = ({ agents, isExpanded, onToggle }) => {
           <div className="health-summary">
             <div className="health-stat">
               <div className="health-value" style={{ color: '#10b981' }}>
-                ✅ {healthData.healthy}
+                ✅ {normalizedHealthData.healthy}
               </div>
               <div className="health-label">Healthy</div>
             </div>
             <div className="health-stat">
               <div className="health-value" style={{ color: '#f59e0b' }}>
-                ⚠️ {healthData.degraded}
+                ⚠️ {normalizedHealthData.degraded}
               </div>
               <div className="health-label">Degraded</div>
             </div>
             <div className="health-stat">
               <div className="health-value" style={{ color: '#ef4444' }}>
-                🔴 {healthData.down}
+                🔴 {normalizedHealthData.down}
               </div>
               <div className="health-label">Down</div>
             </div>
           </div>
 
           <div className="agents-health-list">
-            {agentsWithHealth.slice(0, 3).map((agent, idx) => (
-              <div key={idx} className="agent-health-card">
+            {normalizedHealthData.agents.slice(0, 3).map((agent, idx) => (
+              <div key={`${agent.name || 'agent'}-${idx}`} className="agent-health-card">
                 <div className="agent-health-header">
-                  <div className="agent-health-status" style={{ 
+                  <div className="agent-health-status" style={{
                     background: getHealthColor(agent.health)
                   }}></div>
                   <div className="agent-health-name">{agent.name}</div>
@@ -319,12 +350,12 @@ export const AgentHealthMonitor = ({ agents, isExpanded, onToggle }) => {
                 </div>
                 <div className="agent-health-metrics">
                   <span>Response: {agent.responseTime}</span>
-                  <span>Success: {agent.successRate}%</span>
-                  <span>CPU: {agent.cpuUsage}%</span>
+                  <span>Success: {toNumber(agent.successRate)}%</span>
+                  <span>CPU: {toNumber(agent.cpuUsage)}%</span>
                 </div>
-                {agent.health === 'degraded' || agent.health === 'idle' ? (
+                {(agent.health === 'degraded' || agent.health === 'idle') ? (
                   <div className="agent-health-warning">
-                    ⚠️ High response time, investigating...
+                    ⚠️ Agent is running below healthy threshold.
                   </div>
                 ) : null}
               </div>
@@ -333,22 +364,24 @@ export const AgentHealthMonitor = ({ agents, isExpanded, onToggle }) => {
 
           <div className="system-health">
             <div className="section-label">🖥️ System Status</div>
-            {healthData.systemHealth.map((sys, idx) => (
-              <div key={idx} className="system-item">
+            {normalizedHealthData.systemHealth.length > 0 ? normalizedHealthData.systemHealth.map((systemItem, idx) => (
+              <div key={`${systemItem.name || 'system'}-${idx}`} className="system-item">
                 <span className="system-name">
-                  {sys.status === 'operational' || sys.status === 'connected' || sys.status === 'accessible' ? '✅' : '⚠️'} {sys.name}
+                  {systemItem.status === 'operational' || systemItem.status === 'connected' || systemItem.status === 'accessible' ? '✅' : '⚠️'} {systemItem.name}
                 </span>
-                <span className="system-latency">{sys.latency}</span>
+                <span className="system-latency">{systemItem.latency}</span>
               </div>
-            ))}
+            )) : (
+              <div className="activity-item-small">System health telemetry not available yet.</div>
+            )}
           </div>
 
-          {healthData.recentErrors.length > 0 && (
+          {normalizedHealthData.recentErrors.length > 0 && (
             <div className="recent-errors">
               <div className="section-label">🐛 Recent Errors</div>
-              {healthData.recentErrors.map((error, idx) => (
-                <div key={idx} className="error-item">
-                  • {error.agent}: {error.error} ({error.count}x)
+              {normalizedHealthData.recentErrors.map((error, idx) => (
+                <div key={`${error.error || 'error'}-${idx}`} className="error-item">
+                  • {error.agent}: {error.error} ({toNumber(error.count, 1)}x)
                 </div>
               ))}
             </div>

@@ -21,7 +21,11 @@ Main feature component for the React dashboard, handling kanban workflow UI, tas
 - Runtime-config driven data mode (`mock` vs `live`) with status/error indicators
 - Seed datasets are applied only when live mode is disabled; live mode initializes empty collections until snapshot hydration
 - Snapshot hydration + realtime event updates via service layer
+- Monitoring widget state (`tokenUsage`, `security`, `health`) hydrated from live mission snapshot payloads
+- Periodic live snapshot polling keeps monitoring metrics fresh while WebSocket handles realtime events
+- Live Feed tab datasets (`feedItems`, `timelineItems`, `skillIntegrations`, `memorySpaces`, `memoryGraphLinks`, `configurationValidator`) hydrate from snapshot payloads
 - API mutation calls for emergency controls and task updates/deletes when live mode is enabled
+- Task interactions normalize task IDs to support numeric seed IDs and string-based live IDs consistently
 - Full-width mission chat section with transcript rendering and compose form
 - Chat send flow that uses live API replies when available and local fallback replies in mock mode
 
