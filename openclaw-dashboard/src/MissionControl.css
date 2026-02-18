@@ -135,6 +135,25 @@ body.dark-mode .add-mark-btn:hover {
     background: #059669 !important;
 }
 
+.add-qwen-btn {
+    background: #8b5cf6 !important;
+    font-size: 11px !important;
+    width: auto !important;
+    padding: 0 8px !important;
+}
+
+.add-qwen-btn:hover {
+    background: #7c3aed !important;
+}
+
+body.dark-mode .add-qwen-btn {
+    background: #8b5cf6 !important;
+}
+
+body.dark-mode .add-qwen-btn:hover {
+    background: #7c3aed !important;
+}
+
 .chat-toggle-btn {
     background: #3b82f6;
     color: white;

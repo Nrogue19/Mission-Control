@@ -409,6 +409,7 @@ const AgentsSidebar = ({
   onToggleMonitor,
   onAddAgent,
   onAddMark,
+  onAddQwen,
   onEditAgent,
   onDeleteAgent,
   allowAgentManagement,
@@ -425,6 +426,9 @@ const AgentsSidebar = ({
         </button>
         <button type="button" className="add-agent-btn add-mark-btn" onClick={onAddMark}>
           + Add Mark
+        </button>
+        <button type="button" className="add-agent-btn add-qwen-btn" onClick={onAddQwen}>
+          + Add Qwen
         </button>
       </div>
     </div>
@@ -1323,6 +1327,33 @@ const MissionControl = () => {
     });
   };
 
+  // Add Qwen as an AI agent
+  const handleAddQwen = () => {
+    const qwenAgent = {
+      id: `agent-qwen-${Date.now()}`,
+      name: 'Qwen',
+      role: 'Fast AI',
+      model: 'ollama/qwen3.5:cloud',
+      status: 'working',
+      initial: 'Q',
+      isAI: true,  // Flag to identify AI agents
+      personality: 'Fast, efficient AI assistant. Quick responses, minimal emoji. Focus on getting things done.'
+    };
+    
+    // Check if Qwen already exists
+    if (agents.some(a => a.name === 'Qwen')) {
+      alert('Qwen is already added!');
+      return;
+    }
+    
+    setAgents(prev => [...prev, qwenAgent]);
+    pushTimelineEvent({
+      type: 'workflow',
+      action: 'Agent added: Qwen',
+      detail: 'Ollama Qwen AI assistant added to the team!'
+    });
+  };
+
   const handleCloseAddAgentModal = () => {
     if (isAddingAgent) {
       return;
@@ -1872,6 +1903,7 @@ const MissionControl = () => {
           onToggleMonitor={handleToggleMonitor}
           onAddAgent={handleOpenAddAgentModal}
           onAddMark={handleAddMark}
+          onAddQwen={handleAddQwen}
           onEditAgent={handleOpenEditAgentModal}
           onDeleteAgent={handleDeleteAgent}
           allowAgentManagement={runtimeConfig.liveDataEnabled}
