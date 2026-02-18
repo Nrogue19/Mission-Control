@@ -923,7 +923,7 @@ const saveToStorage = (key, data) => {
 
 // Main Mission Control Component
 const MissionControl = () => {
-  const shouldUseSeedData = !runtimeConfig.liveDataEnabled;
+  const shouldUseSeedData = !runtimeConfig.liveDataEnabled && !runtimeConfig.cleanMode;
 
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');

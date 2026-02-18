@@ -30,5 +30,8 @@ export const runtimeConfig = {
   // MiniMax AI Config
   minimaxApiKey: process.env.REACT_APP_MINIMAX_API_KEY || '',
   minimaxModel: process.env.REACT_APP_MINIMAX_MODEL || 'minimax-portal/MiniMax-M2.5',
-  minimaxEnabled: !!process.env.REACT_APP_MINIMAX_API_KEY
+  minimaxEnabled: !!process.env.REACT_APP_MINIMAX_API_KEY,
+  
+  // Clean mode - no mock data
+  cleanMode: parseBoolean(process.env.REACT_APP_CLEAN_MODE, false)
 };
