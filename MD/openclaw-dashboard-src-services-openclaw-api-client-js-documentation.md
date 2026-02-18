@@ -12,7 +12,8 @@ Provides a dedicated HTTP client layer for OpenClaw Mission Control APIs, includ
 - Snapshot fetch API (`fetchMissionSnapshot`)
 - Emergency command API (`postEmergencyAction`)
 - Task mutation APIs (`postTaskColumnUpdate`, `postTaskUpdate`, `deleteTaskById`)
-- Mission chat send API (`postMissionChatMessage`)
+- Mission chat send API (`postMissionChatMessage`) with optional metadata payload (for sync IDs/author context)
+- Telegram integration status API (`fetchTelegramStatus`)
 
 ## When to Update
 Update when OpenClaw endpoint contracts, request payloads, or timeout/error handling behavior changes.

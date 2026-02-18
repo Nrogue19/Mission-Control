@@ -1,7 +1,7 @@
 // data.js - All data for OpenClaw Mission Control
 
 export const agentColors = {
-  'Jarvis': '#ec4899',
+  'Garry': '#ec4899',
   'Friday': '#f59e0b',
   'Fury': '#8b5cf6',
   'Coach': '#10b981',
@@ -15,7 +15,7 @@ export const agentColors = {
 };
 
 export const agents = [
-  { name: 'Jarvis', role: 'Squad Lead', status: 'awake', initial: 'J' },
+  { name: 'Garry', role: 'Big Brains', status: 'awake', initial: 'G' },
   { name: 'Friday', role: 'Developer', status: 'idle', initial: 'F' },
   { name: 'Fury', role: 'Customer Researcher', status: 'idle', initial: 'F' },
   { name: 'Coach', role: 'Coach Entrepreneur', status: 'idle', initial: 'C' },
@@ -162,35 +162,35 @@ export const tasks = [
 
 export const feedItems = [
   {
-    agent: 'Jarvis',
+    agent: 'Garry',
     action: 'message sent',
     message: 'Commented on task',
     time: 'about 4 days ago',
     status: 'yellow'
   },
   {
-    agent: 'Jarvis',
+    agent: 'Garry',
     action: 'task completed',
-    message: 'Completed Sicarro Marketing Image using Gemini 3 Pro (nano-banana-pro). Output...',
+    message: 'Completed Sicarro Marketing Image using MiniMax-M2.5. Output...',
     time: 'about 4 days ago',
     status: 'green'
   },
   {
-    agent: 'Jarvis',
+    agent: 'Garry',
     action: 'message sent',
     message: 'Commented on task',
     time: 'about 4 days ago',
     status: 'yellow'
   },
   {
-    agent: 'Jarvis',
+    agent: 'Garry',
     action: 'heartbeat check',
     message: 'Friday unresponsive on Sicarro marketing image task (3.5 hrs). Attempted contact faile...',
     time: 'about 4 days ago',
     status: 'yellow'
   },
   {
-    agent: 'Jarvis',
+    agent: 'Garry',
     action: 'message sent',
     message: 'Commented on task',
     time: 'about 5 days ago',
@@ -199,7 +199,7 @@ export const feedItems = [
   {
     agent: 'Wanda',
     action: 'task completed',
-    message: 'Completed Sicarro Car Image v6 using Gemini image generation. Output: sicarro-ca...',
+    message: 'Completed Sicarro Car Image v6 using MiniMax-M2.5. Output: sicarro-ca...',
     time: 'about 5 days ago',
     status: 'green'
   }
@@ -209,7 +209,7 @@ export const missionChatSeed = [
   {
     id: 'chat-1',
     role: 'assistant',
-    author: 'Jarvis',
+    author: 'Garry',
     message: 'OpenClaw chat is online. Ask for status updates, task plans, or quick summaries.',
     time: '14:36'
   },
@@ -223,7 +223,7 @@ export const missionChatSeed = [
   {
     id: 'chat-3',
     role: 'assistant',
-    author: 'Jarvis',
+    author: 'Garry',
     message: '8 active tasks, 1 in review, no critical blockers. Timeline and memory checks look healthy.',
     time: '14:37'
   }
@@ -233,10 +233,10 @@ export const auditTimeline = [
   {
     id: 1,
     time: '14:32:15',
-    agent: 'Jarvis',
+    agent: 'Garry',
     type: 'task',
     action: 'Completed task #42',
-    detail: 'Sent email to user@example.com and used OpenAI API (2.3K tokens).'
+    detail: 'Sent email to user@example.com and used MiniMax-M2.5 API (2.3K tokens).'
   },
   {
     id: 2,
@@ -252,7 +252,7 @@ export const auditTimeline = [
     agent: 'Vision',
     type: 'error',
     action: 'API call failed',
-    detail: 'Timeout connecting to Claude API. Retrying (attempt 2/3).'
+    detail: 'Timeout connecting to MiniMax-M2.5 API. Retrying (attempt 2/3).'
   },
   {
     id: 4,

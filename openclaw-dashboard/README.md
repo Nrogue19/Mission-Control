@@ -2,6 +2,40 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Deployment (GitHub Pages)
+
+This project is configured for GitHub Pages deployment.
+
+### One-time setup
+
+1. Ensure this repository is pushed to GitHub.
+2. Confirm `package.json` has:
+   - `"homepage": "https://nrogue19.github.io/Mission-Control"`
+   - `predeploy` and `deploy` scripts using `gh-pages`
+
+### Deploy
+
+In `openclaw-dashboard/` run:
+
+```bash
+npm install
+npm run deploy
+```
+
+This publishes the production `build/` folder to the `gh-pages` branch.
+
+### GitHub Pages setting
+
+In your GitHub repo:
+
+1. Go to **Settings → Pages**
+2. Set **Source** to **Deploy from a branch**
+3. Select branch **gh-pages** and folder **/(root)**
+4. Save and wait for the site URL to appear
+
+Your deployed URL will be:
+`https://nrogue19.github.io/Mission-Control`
+
 ## Available Scripts
 
 In the project directory, you can run:
@@ -13,6 +47,16 @@ Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
 The page will reload when you make changes.\
 You may also see any lint errors in the console.
+
+### `npm run start:backend`
+
+Runs the local mock backend on [http://localhost:8787](http://localhost:8787).
+
+### `npm run start:live`
+
+Runs both the React frontend and the local mock backend together in one command.
+
+Use this for local live-integration development so API and WebSocket endpoints are available.
 
 ### `npm test`
 

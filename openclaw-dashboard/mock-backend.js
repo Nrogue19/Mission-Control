@@ -3,6 +3,13 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { Server: WebSocketServer } = require('ws');
+const {
+  TELEGRAM_ENABLED,
+  notifyTelegram,
+  sendChatToTelegram,
+  startTelegramPolling,
+  getTelegramBotInfo
+} = require('./telegramService');
 
 const PORT = 8787;
 const OPENCLAW_AGENT_ID = process.env.OPENCLAW_AGENT_ID || 'main';
@@ -10,9 +17,15 @@ const OPENCLAW_AGENT_TIMEOUT_MS = Number(process.env.OPENCLAW_AGENT_TIMEOUT_MS |
 const TASK_COLUMNS = new Set(['inbox', 'assigned', 'progress', 'review']);
 const SOCKET_OPEN = 1;
 const AGENT_COLORS = ['#ec4899', '#f59e0b', '#6366f1', '#10b981', '#ef4444', '#8b5cf6'];
+const AGENT_CONFIG_FILENAME = '.openclaw-agents.json';
+const AGENT_SECRETS_FILENAME = '.openclaw-agent-secrets.json';
+const AGENT_CONFIG_PATH = path.join(__dirname, AGENT_CONFIG_FILENAME);
+const AGENT_SECRETS_PATH = path.join(__dirname, AGENT_SECRETS_FILENAME);
+const AGENT_STATUSES = new Set(['awake', 'idle', 'working']);
 
 const missionState = {
-  tasks: null
+  tasks: null,
+  chatMessages: []
 };
 
 let wsServer = null;
@@ -29,6 +42,10 @@ const sendJson = (res, statusCode, data) => {
 };
 
 const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
+
+const logTelegramError = (context, error) => {
+  console.error(`${context}:`, error?.message || error);
+};
 
 const escapePowerShellQuotedValue = (value) => String(value || '').replace(/'/g, "''");
 
@@ -217,6 +234,306 @@ const toAlertSeverity = (severity) => {
 };
 
 const cloneTasks = (tasks) => tasks.map((task) => ({ ...task }));
+const cloneChatMessages = (messages) => messages.map((message) => ({ ...message }));
+
+const appendChatMessageToState = (message) => {
+  if (!message || typeof message !== 'object') {
+    return;
+  }
+
+  const messageId = String(message.id || '').trim();
+  if (messageId && missionState.chatMessages.some((entry) => String(entry.id || '').trim() === messageId)) {
+    return;
+  }
+
+  missionState.chatMessages.push({ ...message });
+
+  if (missionState.chatMessages.length > 300) {
+    missionState.chatMessages = missionState.chatMessages.slice(missionState.chatMessages.length - 300);
+  }
+};
+
+const sanitizeInlineText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const toNormalizedAgentId = (value) => sanitizeInlineText(value)
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || `agent-${Date.now()}`;
+
+const readJsonFileSafe = (filePath, fallbackValue) => {
+  if (!fs.existsSync(filePath)) {
+    return fallbackValue;
+  }
+
+  try {
+    const rawText = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(rawText);
+    return parsed && typeof parsed === 'object' ? parsed : fallbackValue;
+  } catch {
+    return fallbackValue;
+  }
+};
+
+const writeJsonFileSafe = (filePath, payload) => {
+  const serialized = JSON.stringify(payload, null, 2);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, serialized, { encoding: 'utf8' });
+
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  fs.renameSync(tempPath, filePath);
+};
+
+const toAgentKeyReference = (agentName, existingReferences = []) => {
+  const normalizedBase = sanitizeInlineText(agentName)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const baseName = `OPENCLAW_AGENT_${normalizedBase || 'CUSTOM'}_API_KEY`;
+  const normalizedExisting = new Set(existingReferences.map((value) => String(value || '').toUpperCase()));
+
+  if (!normalizedExisting.has(baseName)) {
+    return baseName;
+  }
+
+  let suffix = 2;
+  let nextName = `${baseName}_${suffix}`;
+  while (normalizedExisting.has(nextName)) {
+    suffix += 1;
+    nextName = `${baseName}_${suffix}`;
+  }
+
+  return nextName;
+};
+
+const redactApiKey = (value) => {
+  const normalized = String(value || '');
+  if (normalized.length <= 8) {
+    return '********';
+  }
+
+  return `${normalized.slice(0, 4)}...${normalized.slice(-4)}`;
+};
+
+const isAllowedByPattern = (value, minLength, maxLength, pattern) => (
+  value.length >= minLength
+  && value.length <= maxLength
+  && pattern.test(value)
+);
+
+const validateIncomingAgentPayload = (payload) => {
+  const normalizedName = sanitizeInlineText(payload?.name);
+  const normalizedRole = sanitizeInlineText(payload?.role);
+  const normalizedModel = sanitizeInlineText(payload?.model);
+  const apiKey = String(payload?.apiKey || '').trim();
+  const errors = [];
+
+  if (!isAllowedByPattern(normalizedName, 2, 48, /^[A-Za-z0-9 _.-]+$/)) {
+    errors.push('Agent name must be 2-48 chars and can only include letters, numbers, spaces, _, -, and .');
+  }
+
+  if (!isAllowedByPattern(normalizedRole, 2, 80, /^[A-Za-z0-9 _.,/&()\-]+$/)) {
+    errors.push('Role must be 2-80 chars and can only include letters, numbers, spaces, and punctuation (.,/&()-).');
+  }
+
+  if (!isAllowedByPattern(normalizedModel, 2, 80, /^[A-Za-z0-9._:/\-]+$/)) {
+    errors.push('AI model must be 2-80 chars and can only include letters, numbers, ., _, :, /, and -.');
+  }
+
+  if (apiKey.length < 12 || apiKey.length > 300 || /\s/.test(apiKey)) {
+    errors.push('API key must be 12-300 chars and cannot include spaces.');
+  }
+
+  return {
+    errors,
+    values: {
+      name: normalizedName,
+      role: normalizedRole,
+      model: normalizedModel,
+      apiKey
+    }
+  };
+};
+
+const validateIncomingAgentUpdatePayload = (payload) => {
+  const normalizedName = sanitizeInlineText(payload?.name);
+  const normalizedRole = sanitizeInlineText(payload?.role);
+  const normalizedModel = sanitizeInlineText(payload?.model);
+  const apiKey = String(payload?.apiKey || '').trim();
+  const errors = [];
+
+  if (!isAllowedByPattern(normalizedName, 2, 48, /^[A-Za-z0-9 _.-]+$/)) {
+    errors.push('Agent name must be 2-48 chars and can only include letters, numbers, spaces, _, -, and .');
+  }
+
+  if (!isAllowedByPattern(normalizedRole, 2, 80, /^[A-Za-z0-9 _.,/&()\-]+$/)) {
+    errors.push('Role must be 2-80 chars and can only include letters, numbers, spaces, and punctuation (.,/&()-).');
+  }
+
+  if (!isAllowedByPattern(normalizedModel, 2, 80, /^[A-Za-z0-9._:/\-]+$/)) {
+    errors.push('AI model must be 2-80 chars and can only include letters, numbers, ., _, :, /, and -.');
+  }
+
+  if (apiKey && (apiKey.length < 12 || apiKey.length > 300 || /\s/.test(apiKey))) {
+    errors.push('API key must be 12-300 chars and cannot include spaces.');
+  }
+
+  return {
+    errors,
+    values: {
+      name: normalizedName,
+      role: normalizedRole,
+      model: normalizedModel,
+      apiKey
+    }
+  };
+};
+
+const readConfiguredAgents = () => {
+  const payload = readJsonFileSafe(AGENT_CONFIG_PATH, { version: 1, agents: [] });
+  const rawAgents = Array.isArray(payload.agents) ? payload.agents : [];
+
+  return rawAgents
+    .map((agent, index) => {
+      const name = sanitizeInlineText(agent?.name);
+      const role = sanitizeInlineText(agent?.role) || 'Custom Agent';
+      const model = sanitizeInlineText(agent?.model) || 'unspecified';
+      const status = AGENT_STATUSES.has(String(agent?.status || '').toLowerCase())
+        ? String(agent.status).toLowerCase()
+        : 'working';
+      const id = sanitizeInlineText(agent?.id) || `${toNormalizedAgentId(name || `agent-${index + 1}`)}-${index + 1}`;
+      const apiKeyReference = sanitizeInlineText(agent?.apiKeyReference);
+
+      if (!name) {
+        return null;
+      }
+
+      return {
+        id,
+        name,
+        role,
+        model,
+        status,
+        apiKeyReference,
+        createdAt: sanitizeInlineText(agent?.createdAt) || new Date().toISOString()
+      };
+    })
+    .filter(Boolean);
+};
+
+const writeConfiguredAgents = (agents) => {
+  writeJsonFileSafe(AGENT_CONFIG_PATH, {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    agents
+  });
+};
+
+const readConfiguredAgentSecrets = () => {
+  const payload = readJsonFileSafe(AGENT_SECRETS_PATH, { version: 1, keys: {} });
+  const keys = payload && typeof payload.keys === 'object' && payload.keys !== null
+    ? payload.keys
+    : {};
+
+  return {
+    version: 1,
+    keys
+  };
+};
+
+const writeConfiguredAgentSecrets = (payload) => {
+  writeJsonFileSafe(AGENT_SECRETS_PATH, {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    keys: payload.keys
+  });
+};
+
+const persistConfiguredAgentState = ({
+  previousAgents,
+  previousSecrets,
+  nextAgents,
+  nextSecrets
+}) => {
+  try {
+    writeConfiguredAgents(nextAgents);
+    writeConfiguredAgentSecrets(nextSecrets);
+  } catch (error) {
+    try {
+      writeConfiguredAgents(previousAgents);
+      writeConfiguredAgentSecrets(previousSecrets);
+    } catch {
+      // No-op: preserve the original write failure and return it to caller.
+    }
+
+    throw error;
+  }
+};
+
+const findConfiguredAgentIndexById = (agents, agentId) => (
+  agents.findIndex((agent) => String(agent.id || '').trim() === String(agentId || '').trim())
+);
+
+const toDisplayAgent = (agent) => {
+  const name = sanitizeInlineText(agent?.name);
+  const status = AGENT_STATUSES.has(String(agent?.status || '').toLowerCase())
+    ? String(agent.status).toLowerCase()
+    : 'working';
+
+  return {
+    id: sanitizeInlineText(agent?.id),
+    isConfigManaged: true,
+    name,
+    role: sanitizeInlineText(agent?.role) || 'Custom Agent',
+    status,
+    initial: name ? name.charAt(0).toUpperCase() : 'A',
+    model: sanitizeInlineText(agent?.model) || undefined
+  };
+};
+
+const mergeAgents = (runtimeAgents, configuredAgents) => {
+  const mergedAgents = [];
+  const indexByName = new Map();
+
+  runtimeAgents.forEach((agent) => {
+    const key = sanitizeInlineText(agent?.name).toLowerCase();
+    if (!key) {
+      return;
+    }
+
+    indexByName.set(key, mergedAgents.length);
+    mergedAgents.push(agent);
+  });
+
+  configuredAgents.forEach((configuredAgent) => {
+    const configuredDisplay = toDisplayAgent(configuredAgent);
+    const key = configuredDisplay.name.toLowerCase();
+    if (!key) {
+      return;
+    }
+
+    const existingIndex = indexByName.get(key);
+    if (existingIndex === undefined) {
+      indexByName.set(key, mergedAgents.length);
+      mergedAgents.push(configuredDisplay);
+      return;
+    }
+
+    const existingAgent = mergedAgents[existingIndex];
+    mergedAgents[existingIndex] = {
+      ...existingAgent,
+      id: configuredDisplay.id || existingAgent.id,
+      isConfigManaged: true,
+      role: configuredDisplay.role || existingAgent.role,
+      status: existingAgent.status === 'awake' ? 'awake' : configuredDisplay.status,
+      model: configuredDisplay.model || existingAgent.model
+    };
+  });
+
+  return mergedAgents;
+};
 
 const buildTokenUsageData = (status) => {
   const statusByAgent = Array.isArray(status?.sessions?.byAgent) ? status.sessions.byAgent : [];
@@ -586,13 +903,17 @@ const buildConfigurationValidator = ({ status, workspaceFiles, tasks }) => {
     name: file.name,
     status: String(file.name || '').toLowerCase().endsWith('.ps1') ? 'warning' : 'valid'
   }));
+  const localConfigFiles = [
+    { name: AGENT_CONFIG_FILENAME, status: fs.existsSync(AGENT_CONFIG_PATH) ? 'valid' : 'warning' },
+    { name: AGENT_SECRETS_FILENAME, status: fs.existsSync(AGENT_SECRETS_PATH) ? 'valid' : 'warning' }
+  ];
 
   const healthScore = clampNumber(100 - (warningFindings.length * 6) - (highFindings.length * 18) - (reviewTaskCount * 4), 45, 100);
 
   return {
     healthScore,
     issues,
-    validatedFiles
+    validatedFiles: [...validatedFiles, ...localConfigFiles]
   };
 };
 
@@ -664,7 +985,7 @@ const buildHealthData = ({ status, agents, tasks, workspaceFiles }) => {
     ));
 
     const ageMs = toNumberOrZero(matchingStatus?.lastActiveAgeMs);
-    const isAwake = agent.status === 'awake';
+    const isAwake = agent.status === 'awake' || agent.status === 'working';
     const isHealthy = isAwake && ageMs <= 2 * 60 * 1000;
     const health = isHealthy ? 'healthy' : (isAwake ? 'degraded' : 'idle');
     const responseMs = clampNumber(Math.round((ageMs / 8) + 110), 80, 2500);
@@ -789,6 +1110,13 @@ const initializeMissionTasks = (generatedTasks) => {
 };
 
 const broadcastRealtimeEvent = (event) => {
+  // Send to Telegram for important events
+  if (TELEGRAM_ENABLED && event?.type && event?.action) {
+    notifyTelegram(event).catch((error) => {
+      console.error('Telegram notification failed:', error.message);
+    });
+  }
+
   if (!wsServer) {
     return;
   }
@@ -810,6 +1138,33 @@ const broadcastTasksReplace = () => {
   });
 };
 
+const buildAndBroadcastAgentSnapshot = async (fallbackAgents) => {
+  let snapshot = null;
+
+  try {
+    snapshot = await buildSnapshot();
+    broadcastRealtimeEvent({
+      type: 'mission.agents.replace',
+      payload: {
+        agents: Array.isArray(snapshot?.agents) ? snapshot.agents : fallbackAgents
+      }
+    });
+    broadcastRealtimeEvent({
+      type: 'mission.snapshot',
+      payload: snapshot
+    });
+  } catch {
+    broadcastRealtimeEvent({
+      type: 'mission.agents.replace',
+      payload: {
+        agents: fallbackAgents
+      }
+    });
+  }
+
+  return snapshot;
+};
+
 const buildSnapshot = async () => {
   try {
     const status = await getOpenClawStatus();
@@ -822,15 +1177,19 @@ const buildSnapshot = async () => {
     const workspaceDir = statusAgents[0]?.workspaceDir || '';
     const localFiles = readWorkspaceFiles(workspaceDir);
 
-    const agents = statusAgents.map((agent) => {
+    const runtimeAgents = statusAgents.map((agent) => {
       const name = toTitleCase(agent.id);
       return {
+        id: `runtime-${toNormalizedAgentId(agent.id)}`,
+        isConfigManaged: false,
         name,
         role: 'OpenClaw Agent',
         status: toAgentStatus(agent.lastActiveAgeMs),
         initial: name.charAt(0).toUpperCase()
       };
     });
+    const configuredAgents = readConfiguredAgents();
+    const agents = mergeAgents(runtimeAgents, configuredAgents);
 
     const generatedTasks = buildLiveTasks({ statusAgents, statusSessions, workspaceFiles: localFiles });
     const tasks = initializeMissionTasks(generatedTasks);
@@ -850,7 +1209,7 @@ const buildSnapshot = async () => {
       tasks: cloneTasks(tasks),
       feedItems,
       timelineItems,
-      chatMessages: [],
+      chatMessages: cloneChatMessages(missionState.chatMessages),
       skillIntegrations,
       memorySpaces,
       memoryGraphLinks,
@@ -864,13 +1223,15 @@ const buildSnapshot = async () => {
       missionState.tasks = [];
     }
 
+    const agents = readConfiguredAgents().map((agent) => toDisplayAgent(agent));
+
     return {
-      agents: [],
+      agents,
       localFiles: [],
       tasks: cloneTasks(missionState.tasks),
-      feedItems: buildFeedItems({ tasks: cloneTasks(missionState.tasks), agents: [], statusSessions: [] }),
+      feedItems: buildFeedItems({ tasks: cloneTasks(missionState.tasks), agents, statusSessions: [] }),
       timelineItems: buildTimelineItems({ status: {}, tasks: cloneTasks(missionState.tasks), statusSessions: [] }),
-      chatMessages: [],
+      chatMessages: cloneChatMessages(missionState.chatMessages),
       skillIntegrations: buildSkillIntegrations({ status: {}, workspaceFiles: [], tasks: cloneTasks(missionState.tasks) }),
       memorySpaces: buildMemorySpaces({ status: {}, tasks: cloneTasks(missionState.tasks), workspaceFiles: [], tokenUsage: buildTokenUsageData({}) }),
       memoryGraphLinks: buildMemoryGraphLinks(),
@@ -879,7 +1240,7 @@ const buildSnapshot = async () => {
       security: buildSecurityData({}),
       health: buildHealthData({
         status: {},
-        agents: [],
+        agents,
         tasks: cloneTasks(missionState.tasks),
         workspaceFiles: []
       })
@@ -928,6 +1289,7 @@ const server = http.createServer(async (req, res) => {
   if (requestPath === '/api/mission-control/chat' && req.method === 'POST') {
     const body = await readBody(req);
     const message = String(body.message || '').trim();
+    const incomingMessageId = String(body.messageId || '').trim();
 
     if (!message) {
       sendJson(res, 400, {
@@ -936,35 +1298,348 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Create user message for sync
+    const userMessage = {
+      id: incomingMessageId || `chat-user-${Date.now()}`,
+      role: 'user',
+      author: body.author || 'You',
+      message,
+      time: now()
+    };
+
+    appendChatMessageToState(userMessage);
+
+    // Send to Telegram
+    if (TELEGRAM_ENABLED) {
+      sendChatToTelegram(userMessage).catch((error) => {
+        logTelegramError('Telegram chat sync failed', error);
+      });
+    }
+
+    // Broadcast user message to websocket clients
+    broadcastRealtimeEvent({
+      type: 'mission.chat.append',
+      payload: userMessage
+    });
+
     try {
       const openClawReplyText = await requestOpenClawReply(message);
 
-      sendJson(res, 200, {
-        reply: {
-          id: `reply-${Date.now()}`,
-          role: 'assistant',
-          author: 'OpenClaw',
-          message: openClawReplyText,
-          time: now()
-        }
+      const replyMessage = {
+        id: `reply-${Date.now()}`,
+        role: 'assistant',
+        author: 'OpenClaw',
+        message: openClawReplyText,
+        time: now()
+      };
+
+      appendChatMessageToState(replyMessage);
+
+      // Send reply to Telegram
+      if (TELEGRAM_ENABLED) {
+        sendChatToTelegram(replyMessage).catch((error) => {
+          logTelegramError('Telegram chat sync failed', error);
+        });
+      }
+
+      // Broadcast reply to websocket clients
+      broadcastRealtimeEvent({
+        type: 'mission.chat.append',
+        payload: replyMessage
       });
+
+      sendJson(res, 200, { reply: replyMessage });
     } catch (error) {
-      sendJson(res, 200, {
-        reply: {
-          id: `reply-local-${Date.now()}`,
-          role: 'assistant',
-          author: 'Jarvis',
-          message: `OpenClaw agent bridge failed (${error?.message || 'unknown error'}). Fallback reply: ${message}`,
-          time: now()
-        }
+      const fallbackReply = {
+        id: `reply-local-${Date.now()}`,
+        role: 'assistant',
+        author: 'Jarvis',
+        message: `OpenClaw agent bridge failed (${error?.message || 'unknown error'}). Fallback reply: ${message}`,
+        time: now()
+      };
+
+      appendChatMessageToState(fallbackReply);
+
+      // Send fallback reply to Telegram
+      if (TELEGRAM_ENABLED) {
+        sendChatToTelegram(fallbackReply).catch((error) => {
+          logTelegramError('Telegram chat sync failed', error);
+        });
+      }
+
+      broadcastRealtimeEvent({
+        type: 'mission.chat.append',
+        payload: fallbackReply
       });
+
+      sendJson(res, 200, { reply: fallbackReply });
     }
 
     return;
   }
 
   if (requestPath === '/api/mission-control/emergency' && req.method === 'POST') {
+    const body = await readBody(req);
+    const action = String(body.action || '').trim() || 'unknown';
+
+    if (TELEGRAM_ENABLED) {
+      notifyTelegram({
+        type: 'safety',
+        action: `Emergency action: ${action}`,
+        detail: 'Mission Control emergency mode was updated.',
+        agent: 'System'
+      }).catch((error) => {
+        logTelegramError('Telegram emergency notify failed', error);
+      });
+    }
+
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (requestPath === '/api/mission-control/agents' && req.method === 'GET') {
+    const snapshot = await buildSnapshot();
+    sendJson(res, 200, { agents: snapshot.agents || [] });
+    return;
+  }
+
+  if (requestPath === '/api/mission-control/agents' && req.method === 'POST') {
+    const body = await readBody(req);
+    const validation = validateIncomingAgentPayload(body);
+
+    if (validation.errors.length > 0) {
+      sendJson(res, 400, {
+        error: validation.errors[0],
+        details: validation.errors
+      });
+      return;
+    }
+
+    const configuredAgents = readConfiguredAgents();
+    const duplicate = configuredAgents.some((agent) => (
+      String(agent.name || '').toLowerCase() === validation.values.name.toLowerCase()
+    ));
+
+    if (duplicate) {
+      sendJson(res, 409, { error: 'Agent name already exists in config.' });
+      return;
+    }
+
+    const configuredSecrets = readConfiguredAgentSecrets();
+    const existingReferences = Object.keys(configuredSecrets.keys || {});
+    const apiKeyReference = toAgentKeyReference(validation.values.name, existingReferences);
+    const createdAt = new Date().toISOString();
+
+    const nextAgent = {
+      id: `${toNormalizedAgentId(validation.values.name)}-${Date.now()}`,
+      name: validation.values.name,
+      role: validation.values.role,
+      model: validation.values.model,
+      status: 'working',
+      apiKeyReference,
+      createdAt
+    };
+
+    const nextConfiguredAgents = [...configuredAgents, nextAgent];
+    const nextSecrets = {
+      version: 1,
+      keys: {
+        ...(configuredSecrets.keys || {}),
+        [apiKeyReference]: validation.values.apiKey
+      }
+    };
+
+    try {
+      persistConfiguredAgentState({
+        previousAgents: configuredAgents,
+        previousSecrets: configuredSecrets,
+        nextAgents: nextConfiguredAgents,
+        nextSecrets
+      });
+    } catch {
+      sendJson(res, 500, { error: 'Failed to update agent config files.' });
+      return;
+    }
+
+    const createdAgent = toDisplayAgent(nextAgent);
+    const snapshot = await buildAndBroadcastAgentSnapshot([createdAgent]);
+
+    if (TELEGRAM_ENABLED) {
+      notifyTelegram({
+        type: 'agent',
+        action: `Agent added: ${createdAgent.name}`,
+        detail: `${createdAgent.role || 'Custom Agent'} configured on ${createdAgent.model || 'unspecified'}.`,
+        agent: 'System'
+      }).catch((error) => {
+        logTelegramError('Telegram agent-create notify failed', error);
+      });
+    }
+
+    sendJson(res, 201, {
+      ok: true,
+      agent: {
+        ...createdAgent,
+        apiKeyReference,
+        apiKeyPreview: redactApiKey(validation.values.apiKey)
+      },
+      configFiles: [AGENT_CONFIG_FILENAME, AGENT_SECRETS_FILENAME],
+      snapshot
+    });
+    return;
+  }
+
+  if (requestPath.startsWith('/api/mission-control/agents/') && (req.method === 'PUT' || req.method === 'DELETE')) {
+    const agentId = decodeURIComponent(requestPath.slice('/api/mission-control/agents/'.length)).trim();
+
+    if (!agentId) {
+      sendJson(res, 400, { error: 'Agent ID is required.' });
+      return;
+    }
+
+    const configuredAgents = readConfiguredAgents();
+    const configuredSecrets = readConfiguredAgentSecrets();
+    const targetIndex = findConfiguredAgentIndexById(configuredAgents, agentId);
+
+    if (targetIndex === -1) {
+      sendJson(res, 404, { error: 'Config-managed agent not found.' });
+      return;
+    }
+
+    const targetAgent = configuredAgents[targetIndex];
+
+    if (req.method === 'DELETE') {
+      const nextConfiguredAgents = configuredAgents.filter((candidate, index) => index !== targetIndex);
+      const nextKeys = { ...(configuredSecrets.keys || {}) };
+
+      if (targetAgent.apiKeyReference) {
+        delete nextKeys[targetAgent.apiKeyReference];
+      }
+
+      try {
+        persistConfiguredAgentState({
+          previousAgents: configuredAgents,
+          previousSecrets: configuredSecrets,
+          nextAgents: nextConfiguredAgents,
+          nextSecrets: {
+            version: 1,
+            keys: nextKeys
+          }
+        });
+      } catch {
+        sendJson(res, 500, { error: 'Failed to update agent config files.' });
+        return;
+      }
+
+      const snapshot = await buildAndBroadcastAgentSnapshot(
+        nextConfiguredAgents.map((agent) => toDisplayAgent(agent))
+      );
+
+      if (TELEGRAM_ENABLED) {
+        notifyTelegram({
+          type: 'agent',
+          action: `Agent deleted: ${targetAgent.name}`,
+          detail: 'Agent removed from the mission roster.',
+          agent: 'System'
+        }).catch((error) => {
+          logTelegramError('Telegram agent-delete notify failed', error);
+        });
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        deletedAgent: toDisplayAgent(targetAgent),
+        configFiles: [AGENT_CONFIG_FILENAME, AGENT_SECRETS_FILENAME],
+        snapshot
+      });
+      return;
+    }
+
+    const body = await readBody(req);
+    const validation = validateIncomingAgentUpdatePayload(body);
+
+    if (validation.errors.length > 0) {
+      sendJson(res, 400, {
+        error: validation.errors[0],
+        details: validation.errors
+      });
+      return;
+    }
+
+    const duplicateName = configuredAgents.some((agent, index) => (
+      index !== targetIndex
+      && String(agent.name || '').toLowerCase() === validation.values.name.toLowerCase()
+    ));
+
+    if (duplicateName) {
+      sendJson(res, 409, { error: 'Another config-managed agent already uses that name.' });
+      return;
+    }
+
+    const resolvedApiKeyReference = targetAgent.apiKeyReference || toAgentKeyReference(
+      validation.values.name,
+      Object.keys(configuredSecrets.keys || {})
+    );
+    const updatedAgent = {
+      ...targetAgent,
+      name: validation.values.name,
+      role: validation.values.role,
+      model: validation.values.model,
+      status: 'working',
+      apiKeyReference: resolvedApiKeyReference
+    };
+
+    const nextConfiguredAgents = configuredAgents.map((agent, index) => (
+      index === targetIndex ? updatedAgent : agent
+    ));
+    const nextKeys = { ...(configuredSecrets.keys || {}) };
+
+    if (validation.values.apiKey) {
+      nextKeys[resolvedApiKeyReference] = validation.values.apiKey;
+    }
+
+    try {
+      persistConfiguredAgentState({
+        previousAgents: configuredAgents,
+        previousSecrets: configuredSecrets,
+        nextAgents: nextConfiguredAgents,
+        nextSecrets: {
+          version: 1,
+          keys: nextKeys
+        }
+      });
+    } catch {
+      sendJson(res, 500, { error: 'Failed to update agent config files.' });
+      return;
+    }
+
+    const updatedDisplayAgent = toDisplayAgent(updatedAgent);
+    const snapshot = await buildAndBroadcastAgentSnapshot(
+      nextConfiguredAgents.map((agent) => toDisplayAgent(agent))
+    );
+
+    if (TELEGRAM_ENABLED) {
+      notifyTelegram({
+        type: 'agent',
+        action: `Agent updated: ${updatedDisplayAgent.name}`,
+        detail: `${updatedDisplayAgent.role || 'Custom Agent'} configured on ${updatedDisplayAgent.model || 'unspecified'}.`,
+        agent: 'System'
+      }).catch((error) => {
+        logTelegramError('Telegram agent-update notify failed', error);
+      });
+    }
+
+    sendJson(res, 200, {
+      ok: true,
+      agent: {
+        ...updatedDisplayAgent,
+        apiKeyReference: resolvedApiKeyReference,
+        apiKeyPreview: resolvedApiKeyReference
+          ? redactApiKey(nextKeys[resolvedApiKeyReference] || '')
+          : null
+      },
+      configFiles: [AGENT_CONFIG_FILENAME, AGENT_SECRETS_FILENAME],
+      snapshot
+    });
     return;
   }
 
@@ -991,6 +1666,19 @@ const server = http.createServer(async (req, res) => {
         : task
     ));
 
+    const movedTask = missionState.tasks.find((task) => taskIdsMatch(task.id, taskId));
+
+    if (TELEGRAM_ENABLED && movedTask) {
+      notifyTelegram({
+        type: 'task',
+        action: `Task moved: ${movedTask.title || taskId}`,
+        detail: `Column changed to ${nextColumn}.`,
+        agent: movedTask.assignee || 'System'
+      }).catch((error) => {
+        logTelegramError('Telegram task-move notify failed', error);
+      });
+    }
+
     broadcastTasksReplace();
     sendJson(res, 200, { ok: true, tasks: cloneTasks(missionState.tasks) });
     return;
@@ -1013,7 +1701,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const deletedTask = missionState.tasks[taskIndex];
+
       missionState.tasks = missionState.tasks.filter((task) => !taskIdsMatch(task.id, taskId));
+
+      if (TELEGRAM_ENABLED && deletedTask) {
+        notifyTelegram({
+          type: 'task',
+          action: `Task deleted: ${deletedTask.title || taskId}`,
+          detail: 'Task removed from mission queue.',
+          agent: deletedTask.assignee || 'System'
+        }).catch((error) => {
+          logTelegramError('Telegram task-delete notify failed', error);
+        });
+      }
+
       broadcastTasksReplace();
       sendJson(res, 200, { ok: true, tasks: cloneTasks(missionState.tasks) });
       return;
@@ -1043,8 +1745,34 @@ const server = http.createServer(async (req, res) => {
     };
 
     missionState.tasks = missionState.tasks.map((task, index) => (index === taskIndex ? updatedTask : task));
+
+    if (TELEGRAM_ENABLED) {
+      notifyTelegram({
+        type: 'task',
+        action: `Task updated: ${updatedTask.title || taskId}`,
+        detail: `Task saved in ${updatedTask.column || currentTask.column} column.`,
+        agent: updatedTask.assignee || 'System'
+      }).catch((error) => {
+        logTelegramError('Telegram task-update notify failed', error);
+      });
+    }
+
     broadcastTasksReplace();
     sendJson(res, 200, { ok: true, task: { ...updatedTask }, tasks: cloneTasks(missionState.tasks) });
+    return;
+  }
+
+  // Telegram status endpoint
+  if (requestPath === '/api/mission-control/telegram/status' && req.method === 'GET') {
+    const botInfo = await getTelegramBotInfo();
+    sendJson(res, 200, {
+      enabled: TELEGRAM_ENABLED,
+      connected: Boolean(botInfo),
+      bot: botInfo ? {
+        username: botInfo.username,
+        firstName: botInfo.first_name
+      } : null
+    });
     return;
   }
 
@@ -1067,6 +1795,35 @@ wsServer.on('connection', (socket) => {
   });
 });
 
+// Start Telegram polling for incoming messages
+let telegramPoller = null;
+if (TELEGRAM_ENABLED) {
+  telegramPoller = startTelegramPolling((message) => {
+    appendChatMessageToState(message);
+
+    // Broadcast incoming Telegram message to websocket clients
+    broadcastRealtimeEvent({
+      type: 'mission.chat.append',
+      payload: message
+    });
+  }, 3000);
+
+  console.log('Telegram integration enabled - polling for messages');
+}
+
 server.listen(PORT, () => {
   console.log(`Mock OpenClaw backend running at http://localhost:${PORT}`);
+  if (TELEGRAM_ENABLED) {
+    console.log('Telegram bot connected and syncing with Mission Board');
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  if (telegramPoller) {
+    telegramPoller.stop();
+  }
+  server.close(() => {
+    process.exit(0);
+  });
 });

@@ -25,7 +25,21 @@ const requestWithTimeout = async (url, options = {}) => {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenClaw API error: ${response.status} ${response.statusText}`);
+      let errorMessage = `OpenClaw API error: ${response.status} ${response.statusText}`;
+      const contentType = response.headers.get('content-type') || '';
+
+      if (contentType.toLowerCase().includes('application/json')) {
+        try {
+          const errorPayload = await response.json();
+          if (typeof errorPayload?.error === 'string' && errorPayload.error.trim()) {
+            errorMessage = errorPayload.error.trim();
+          }
+        } catch {
+          // Keep the default status-based message.
+        }
+      }
+
+      throw new Error(errorMessage);
     }
 
     if (response.status === 204) {
@@ -64,9 +78,31 @@ export const deleteTaskById = (taskId) => requestWithTimeout(buildUrl(`/api/miss
   method: 'DELETE'
 });
 
-export const postMissionChatMessage = (message) => requestWithTimeout(buildUrl('/api/mission-control/chat'), {
+export const postMissionChatMessage = (message, metadata = {}) => requestWithTimeout(buildUrl('/api/mission-control/chat'), {
   method: 'POST',
-  body: JSON.stringify({ message })
+  body: JSON.stringify({ message, ...metadata })
 });
+
+export const postCreateAgent = (agentPayload) => requestWithTimeout(buildUrl('/api/mission-control/agents'), {
+  method: 'POST',
+  body: JSON.stringify(agentPayload)
+});
+
+export const putUpdateAgent = (agentId, agentPayload) => requestWithTimeout(
+  buildUrl(`/api/mission-control/agents/${encodeURIComponent(agentId)}`),
+  {
+    method: 'PUT',
+    body: JSON.stringify(agentPayload)
+  }
+);
+
+export const deleteAgentById = (agentId) => requestWithTimeout(
+  buildUrl(`/api/mission-control/agents/${encodeURIComponent(agentId)}`),
+  {
+    method: 'DELETE'
+  }
+);
+
+export const fetchTelegramStatus = () => requestWithTimeout(buildUrl('/api/mission-control/telegram/status'));
 
 export { buildUrl };

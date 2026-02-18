@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './MissionControl.css';
 import './MonitoringStyles.css';
 import { TokenUsageMonitor, SecurityDashboard, AgentHealthMonitor } from './MonitoringComponents';
@@ -9,7 +9,11 @@ import {
   postTaskColumnUpdate,
   postTaskUpdate,
   deleteTaskById,
-  postMissionChatMessage
+  postMissionChatMessage,
+  postCreateAgent,
+  putUpdateAgent,
+  deleteAgentById,
+  fetchTelegramStatus
 } from './services/openclawApiClient';
 import { createOpenClawRealtimeClient } from './services/openclawRealtime';
 import {
@@ -57,6 +61,40 @@ const normalizeTaskId = (value) => String(value ?? '').trim();
 
 const taskIdsMatch = (left, right) => normalizeTaskId(left) === normalizeTaskId(right);
 
+const normalizeMessageId = (value) => String(value ?? '').trim();
+
+const mergeChatMessages = (existingMessages, incomingMessages) => {
+  if (!Array.isArray(incomingMessages) || incomingMessages.length === 0) {
+    return Array.isArray(existingMessages) ? existingMessages : [];
+  }
+
+  const nextMessages = Array.isArray(existingMessages) ? [...existingMessages] : [];
+  const knownIds = new Set(
+    nextMessages
+      .map((message) => normalizeMessageId(message?.id))
+      .filter(Boolean)
+  );
+
+  incomingMessages.forEach((message) => {
+    if (!message || typeof message !== 'object') {
+      return;
+    }
+
+    const incomingId = normalizeMessageId(message.id);
+    if (incomingId && knownIds.has(incomingId)) {
+      return;
+    }
+
+    if (incomingId) {
+      knownIds.add(incomingId);
+    }
+
+    nextMessages.push(message);
+  });
+
+  return nextMessages;
+};
+
 const EMPTY_CONFIGURATION_VALIDATOR = {
   healthScore: 0,
   issues: [],
@@ -87,6 +125,33 @@ const EMPTY_HEALTH = {
   recentErrors: [],
   agents: []
 };
+
+const FALLBACK_AGENT_COLORS = ['#0ea5e9', '#22c55e', '#f97316', '#14b8a6', '#ef4444', '#3b82f6'];
+
+const normalizeAgentName = (value) => String(value || '').trim();
+
+const getAgentColor = (agentName) => {
+  const normalizedName = normalizeAgentName(agentName);
+  if (!normalizedName) {
+    return FALLBACK_AGENT_COLORS[0];
+  }
+
+  if (agentColors[normalizedName]) {
+    return agentColors[normalizedName];
+  }
+
+  const hash = normalizedName
+    .split('')
+    .reduce((accumulator, character) => accumulator + character.charCodeAt(0), 0);
+  return FALLBACK_AGENT_COLORS[hash % FALLBACK_AGENT_COLORS.length];
+};
+
+const toAgentInitial = (agentName) => {
+  const normalizedName = normalizeAgentName(agentName);
+  return normalizedName ? normalizedName.charAt(0).toUpperCase() : 'A';
+};
+
+const agentIdsMatch = (left, right) => String(left ?? '').trim() === String(right ?? '').trim();
 
 // Dark Mode Toggle Component
 const DarkModeToggle = ({ isDark, onToggle }) => (
@@ -230,6 +295,278 @@ const TaskModal = ({ task, agents, onClose, onSave, onDelete }) => {
   );
 };
 
+const AddAgentModal = ({ onClose, onSubmit, isSubmitting, errorMessage }) => {
+  const [formState, setFormState] = useState({
+    name: '',
+    role: '',
+    model: '',
+    apiKey: ''
+  });
+  const [localError, setLocalError] = useState('');
+
+  const handleChange = (field, value) => {
+    setFormState((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    const nextFormState = {
+      name: normalizeAgentName(formState.name),
+      role: normalizeAgentName(formState.role),
+      model: normalizeAgentName(formState.model),
+      apiKey: String(formState.apiKey || '').trim()
+    };
+
+    if (!nextFormState.name || !nextFormState.role || !nextFormState.model || !nextFormState.apiKey) {
+      setLocalError('All fields are required to add an agent.');
+      return;
+    }
+
+    setLocalError('');
+    onSubmit(nextFormState);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={() => !isSubmitting && onClose()}>
+      <div className="modal modal-agent-create" onClick={(event) => event.stopPropagation()}>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-header">
+            <h2 className="modal-title">Add Agent</h2>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={onClose}
+              disabled={isSubmitting}
+              aria-label="Close add agent dialog"
+            >
+              x
+            </button>
+          </div>
+
+          <div className="modal-content">
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="agent-name-input">Agent Name</label>
+              <input
+                id="agent-name-input"
+                type="text"
+                className="modal-input"
+                value={formState.name}
+                onChange={(event) => handleChange('name', event.target.value)}
+                placeholder="e.g. Athena"
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="agent-role-input">Role</label>
+              <input
+                id="agent-role-input"
+                type="text"
+                className="modal-input"
+                value={formState.role}
+                onChange={(event) => handleChange('role', event.target.value)}
+                placeholder="e.g. Incident Analyst"
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="agent-model-input">AI Model</label>
+              <input
+                id="agent-model-input"
+                type="text"
+                className="modal-input"
+                value={formState.model}
+                onChange={(event) => handleChange('model', event.target.value)}
+                placeholder="e.g. gpt-4.1-mini"
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="agent-api-key-input">API Key</label>
+              <input
+                id="agent-api-key-input"
+                type="password"
+                className="modal-input"
+                value={formState.apiKey}
+                onChange={(event) => handleChange('apiKey', event.target.value)}
+                autoComplete="new-password"
+                placeholder="Paste API key"
+                required
+              />
+            </div>
+
+            {(localError || errorMessage) && (
+              <div className="agent-create-error" role="alert">
+                {localError || errorMessage}
+              </div>
+            )}
+          </div>
+
+          <div className="modal-footer">
+            <button
+              type="button"
+              className="modal-button modal-button-secondary"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="modal-button modal-button-primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Adding...' : 'Add Agent'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const EditAgentModal = ({ agent, onClose, onSubmit, isSubmitting, errorMessage }) => {
+  const [formState, setFormState] = useState({
+    name: normalizeAgentName(agent?.name),
+    role: normalizeAgentName(agent?.role),
+    model: normalizeAgentName(agent?.model || ''),
+    apiKey: ''
+  });
+  const [localError, setLocalError] = useState('');
+
+  useEffect(() => {
+    setFormState({
+      name: normalizeAgentName(agent?.name),
+      role: normalizeAgentName(agent?.role),
+      model: normalizeAgentName(agent?.model || ''),
+      apiKey: ''
+    });
+    setLocalError('');
+  }, [agent]);
+
+  const handleChange = (field, value) => {
+    setFormState((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    const nextPayload = {
+      id: agent?.id || '',
+      name: normalizeAgentName(formState.name),
+      role: normalizeAgentName(formState.role),
+      model: normalizeAgentName(formState.model),
+      apiKey: String(formState.apiKey || '').trim()
+    };
+
+    if (!nextPayload.name || !nextPayload.role || !nextPayload.model) {
+      setLocalError('Agent name, role, and model are required.');
+      return;
+    }
+
+    setLocalError('');
+    onSubmit(nextPayload);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={() => !isSubmitting && onClose()}>
+      <div className="modal modal-agent-create" onClick={(event) => event.stopPropagation()}>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-header">
+            <h2 className="modal-title">Edit Agent</h2>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={onClose}
+              disabled={isSubmitting}
+              aria-label="Close edit agent dialog"
+            >
+              x
+            </button>
+          </div>
+
+          <div className="modal-content">
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="edit-agent-name-input">Agent Name</label>
+              <input
+                id="edit-agent-name-input"
+                type="text"
+                className="modal-input"
+                value={formState.name}
+                onChange={(event) => handleChange('name', event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="edit-agent-role-input">Role</label>
+              <input
+                id="edit-agent-role-input"
+                type="text"
+                className="modal-input"
+                value={formState.role}
+                onChange={(event) => handleChange('role', event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="edit-agent-model-input">AI Model</label>
+              <input
+                id="edit-agent-model-input"
+                type="text"
+                className="modal-input"
+                value={formState.model}
+                onChange={(event) => handleChange('model', event.target.value)}
+                required
+              />
+            </div>
+
+            <div className="modal-section">
+              <label className="modal-label" htmlFor="edit-agent-api-key-input">API Key (optional)</label>
+              <input
+                id="edit-agent-api-key-input"
+                type="password"
+                className="modal-input"
+                value={formState.apiKey}
+                onChange={(event) => handleChange('apiKey', event.target.value)}
+                autoComplete="new-password"
+                placeholder="Leave blank to keep current key"
+              />
+            </div>
+
+            {(localError || errorMessage) && (
+              <div className="agent-create-error" role="alert">
+                {localError || errorMessage}
+              </div>
+            )}
+          </div>
+
+          <div className="modal-footer">
+            <button
+              type="button"
+              className="modal-button modal-button-secondary"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="modal-button modal-button-primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : 'Save Agent'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // Header Component
 const Header = ({
   time,
@@ -240,7 +577,8 @@ const Header = ({
   totalTaskCount,
   dataSourceMode,
   connectionStatus,
-  hasConnectionError
+  hasConnectionError,
+  telegramStatus
 }) => {
   const connectionStatusLabel = {
     [CONNECTION_STATUS.MOCK]: 'MOCK DATA',
@@ -283,6 +621,12 @@ const Header = ({
 
       <div className="header-right">
         <DarkModeToggle isDark={isDarkMode} onToggle={onToggleDarkMode} />
+        {telegramStatus?.enabled && (
+          <div className={`telegram-status ${telegramStatus?.connected ? 'connected' : 'disconnected'}`} title={telegramStatus?.bot?.username || 'Telegram Bot'}>
+            <span className="telegram-icon">📱</span>
+            <span className="telegram-label">TG</span>
+          </div>
+        )}
         <div className="time-display">
           <div className="time-value">{time}</div>
           <div className="time-date">{date}</div>
@@ -375,15 +719,37 @@ const EmergencyControls = ({
 );
 
 // Agent Item Component
-const AgentItem = ({ agent }) => (
+const AgentItem = ({ agent, canManage, isBusy, onEdit, onDelete }) => (
   <div className="agent-item">
-    <div className="agent-avatar" style={{ background: agentColors[agent.name] }}>
-      {agent.initial}
+    <div className="agent-avatar" style={{ background: getAgentColor(agent.name) }}>
+      {agent.initial || toAgentInitial(agent.name)}
     </div>
     <div className="agent-info">
       <div className="agent-name">{agent.name}</div>
       <div className="agent-role">{agent.role}</div>
     </div>
+    {canManage && (
+      <div className="agent-item-actions">
+        <button
+          type="button"
+          className="agent-action-btn"
+          onClick={() => onEdit(agent)}
+          disabled={isBusy}
+          aria-label={`Edit ${agent.name}`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="agent-action-btn agent-action-btn-danger"
+          onClick={() => onDelete(agent)}
+          disabled={isBusy}
+          aria-label={`Delete ${agent.name}`}
+        >
+          Del
+        </button>
+      </div>
+    )}
     <div className={`agent-status status-${agent.status}`}>{agent.status}</div>
   </div>
 );
@@ -433,17 +799,34 @@ const AgentsSidebar = ({
   isOpen,
   onClose,
   expandedMonitor,
-  onToggleMonitor
+  onToggleMonitor,
+  onAddAgent,
+  onEditAgent,
+  onDeleteAgent,
+  allowAgentManagement,
+  isManagingAgents
 }) => (
   <div className={`agents-sidebar ${isOpen ? 'open' : ''}`} id="agentsSidebar">
     <button className="mobile-close-btn" onClick={onClose}>✕</button>
     <div className="sidebar-header">
       <span className="sidebar-title">Agents</span>
-      <span className="agent-count">{agents.length}</span>
+      <div className="sidebar-header-actions">
+        <span className="agent-count">{agents.length}</span>
+        <button type="button" className="add-agent-btn" onClick={onAddAgent}>
+          + Add Agent
+        </button>
+      </div>
     </div>
     <div className="agents-list">
       {agents.map((agent, index) => (
-        <AgentItem key={index} agent={agent} />
+        <AgentItem
+          key={agent.id || `${agent.name}-${index}`}
+          agent={agent}
+          canManage={allowAgentManagement || Boolean(agent.isConfigManaged)}
+          isBusy={isManagingAgents}
+          onEdit={onEditAgent}
+          onDelete={onDeleteAgent}
+        />
       ))}
     </div>
     <FilesSection files={files} onFileView={onFileView} />
@@ -497,7 +880,7 @@ const TaskCard = ({ task, onDragStart, onDragEnd, onClick, isInteractionLocked }
           </div>
         </div>
         {task.assignee ? (
-          <div className="task-assignee" style={{ background: agentColors[task.assignee] }}>
+          <div className="task-assignee" style={{ background: getAgentColor(task.assignee) }}>
             {task.assigneeInitial}
           </div>
         ) : (
@@ -566,7 +949,7 @@ const KanbanColumn = ({
 // Feed Item Component
 const FeedItem = ({ item }) => (
   <div className="feed-item">
-    <div className="feed-avatar" style={{ background: agentColors[item.agent] }}>
+    <div className="feed-avatar" style={{ background: getAgentColor(item.agent) }}>
       {item.agent.charAt(0)}
     </div>
     <div className="feed-details">
@@ -909,9 +1292,24 @@ const MissionChatSection = ({
   onSendMessage,
   isSending,
   dataSourceMode,
-  connectionStatus
+  connectionStatus,
+  isOpen,
+  onOpen,
+  onClose
 }) => {
   const [draftMessage, setDraftMessage] = useState('');
+  const messageContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const container = messageContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [isOpen, messages]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -929,46 +1327,74 @@ const MissionChatSection = ({
     ? `Live sync (${connectionStatus})`
     : 'Local mock sync';
 
+  const handleOverlayClick = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <section className="mission-chat-section" aria-label="Mission chat section">
-      <div className="mission-chat-header">
-        <div>
-          <div className="mission-chat-title">MISSION CHAT</div>
-          <div className="mission-chat-subtitle">Chat directly with OpenClaw orchestration</div>
-        </div>
-        <span className={`mission-chat-sync mission-chat-sync-${dataSourceMode}`}>{syncLabel}</span>
-      </div>
+    <>
+      {!isOpen && (
+        <button type="button" className="mission-chat-launcher" onClick={onOpen}>
+          <span>Open Chat</span>
+          <span className="mission-chat-launcher-count">{messages.length}</span>
+        </button>
+      )}
 
-      <div className="mission-chat-messages" role="log" aria-live="polite">
-        {messages.map((message) => (
-          <div key={message.id} className={`chat-message-row chat-message-row-${message.role}`}>
-            <div className={`chat-message-bubble chat-message-bubble-${message.role}`}>
-              <div className="chat-message-meta">
-                <span>{message.author}</span>
-                <span>{message.time}</span>
+      {isOpen && (
+        <div className="mission-chat-overlay" onClick={handleOverlayClick}>
+          <section className="mission-chat-section mission-chat-section-fullscreen" aria-label="Mission chat section">
+            <div className="mission-chat-header">
+              <div>
+                <div className="mission-chat-title">MISSION CHAT</div>
+                <div className="mission-chat-subtitle">Chat directly with OpenClaw orchestration</div>
               </div>
-              <div className="chat-message-text">{message.message}</div>
+              <div className="mission-chat-header-actions">
+                <span className={`mission-chat-sync mission-chat-sync-${dataSourceMode}`}>{syncLabel}</span>
+                <button type="button" className="mission-chat-collapse-btn" onClick={onClose}>
+                  Collapse
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
 
-      <form className="mission-chat-compose" onSubmit={handleSubmit}>
-        <label htmlFor="mission-chat-input" className="mission-chat-label">Message OpenClaw</label>
-        <div className="mission-chat-input-row">
-          <input
-            id="mission-chat-input"
-            type="text"
-            value={draftMessage}
-            onChange={(event) => setDraftMessage(event.target.value)}
-            placeholder="Ask OpenClaw for a plan, summary, or next action..."
-          />
-          <button type="submit" disabled={isSending || !draftMessage.trim()}>
-            {isSending ? 'Sending...' : 'Send to OpenClaw'}
-          </button>
+            <div className="mission-chat-messages" role="log" aria-live="polite" ref={messageContainerRef}>
+              {messages.length === 0 && (
+                <div className="mission-chat-empty">No messages yet. Start a conversation with OpenClaw.</div>
+              )}
+
+              {messages.map((message, index) => (
+                <div key={message.id || `chat-${index}`} className={`chat-message-row chat-message-row-${message.role}`}>
+                  <div className={`chat-message-bubble chat-message-bubble-${message.role}`}>
+                    <div className="chat-message-meta">
+                      <span>{message.author}</span>
+                      <span>{message.time}</span>
+                    </div>
+                    <div className="chat-message-text">{message.message}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <form className="mission-chat-compose" onSubmit={handleSubmit}>
+              <label htmlFor="mission-chat-input" className="mission-chat-label">Message OpenClaw</label>
+              <div className="mission-chat-input-row">
+                <input
+                  id="mission-chat-input"
+                  type="text"
+                  value={draftMessage}
+                  onChange={(event) => setDraftMessage(event.target.value)}
+                  placeholder="Ask OpenClaw for a plan, summary, or next action..."
+                />
+                <button type="submit" disabled={isSending || !draftMessage.trim()}>
+                  {isSending ? 'Sending...' : 'Send to OpenClaw'}
+                </button>
+              </div>
+            </form>
+          </section>
         </div>
-      </form>
-    </section>
+      )}
+    </>
   );
 };
 
@@ -1002,7 +1428,20 @@ const MissionControl = () => {
   });
   const [expandedMonitor, setExpandedMonitor] = useState('token');
   const [emergencyMode, setEmergencyMode] = useState(EMERGENCY_MODE.NORMAL);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isSendingChat, setIsSendingChat] = useState(false);
+  const [isAddAgentModalOpen, setIsAddAgentModalOpen] = useState(false);
+  const [isAddingAgent, setIsAddingAgent] = useState(false);
+  const [addAgentError, setAddAgentError] = useState('');
+  const [isEditAgentModalOpen, setIsEditAgentModalOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [isEditingAgent, setIsEditingAgent] = useState(false);
+  const [editAgentError, setEditAgentError] = useState('');
+  const [telegramStatus, setTelegramStatus] = useState({
+    enabled: false,
+    connected: false,
+    bot: null
+  });
   const [connectionState, setConnectionState] = useState(() => (
     runtimeConfig.liveDataEnabled
       ? {
@@ -1080,9 +1519,9 @@ const MissionControl = () => {
     }
 
     if (Array.isArray(snapshot.chatMessages)) {
-      setChatMessages(snapshot.chatMessages);
+      setChatMessages((current) => mergeChatMessages(current, snapshot.chatMessages));
     } else if (Array.isArray(snapshot.missionChat)) {
-      setChatMessages(snapshot.missionChat);
+      setChatMessages((current) => mergeChatMessages(current, snapshot.missionChat));
     }
 
     if (Array.isArray(snapshot.timelineItems)) {
@@ -1206,7 +1645,7 @@ const MissionControl = () => {
             break;
           case 'mission.chat.append':
             if (payload && typeof payload === 'object') {
-              setChatMessages((current) => [...current, payload]);
+              setChatMessages((current) => mergeChatMessages(current, [payload]));
             }
             break;
           case 'mission.tasks.replace':
@@ -1234,6 +1673,56 @@ const MissionControl = () => {
     };
   }, [applyMissionSnapshot, reportIntegrationError]);
 
+  // Fetch Telegram status
+  useEffect(() => {
+    if (!runtimeConfig.liveDataEnabled) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const fetchStatus = async () => {
+      try {
+        const status = await fetchTelegramStatus();
+        if (isMounted && status) {
+          setTelegramStatus({
+            enabled: status.enabled || false,
+            connected: status.connected || false,
+            bot: status.bot || null
+          });
+        }
+      } catch {
+        // Silently ignore errors
+      }
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isChatOpen) {
+      return undefined;
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsChatOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isChatOpen]);
+
   const handleFileView = (file) => {
     alert(`📄 ${file.name}\n\n${file.description}\n\nType: ${file.type}\nLast modified: ${file.lastModified}\n\nClick to open and edit this file in your local editor.`);
   };
@@ -1245,6 +1734,20 @@ const MissionControl = () => {
 
   const handleToggleMonitor = (monitorKey) => {
     setExpandedMonitor((current) => (current === monitorKey ? null : monitorKey));
+  };
+
+  const handleOpenAddAgentModal = () => {
+    setAddAgentError('');
+    setIsAddAgentModalOpen(true);
+  };
+
+  const handleCloseAddAgentModal = () => {
+    if (isAddingAgent) {
+      return;
+    }
+
+    setIsAddAgentModalOpen(false);
+    setAddAgentError('');
   };
 
   const pushTimelineEvent = ({ type, action, detail }) => {
@@ -1262,6 +1765,241 @@ const MissionControl = () => {
       },
       ...current
     ]);
+  };
+
+  const handleAddAgent = async (agentInput) => {
+    const normalizedName = normalizeAgentName(agentInput?.name);
+    const normalizedRole = normalizeAgentName(agentInput?.role);
+    const normalizedModel = normalizeAgentName(agentInput?.model);
+    const normalizedApiKey = String(agentInput?.apiKey || '').trim();
+
+    if (!normalizedName || !normalizedRole || !normalizedModel || !normalizedApiKey) {
+      setAddAgentError('All fields are required to add an agent.');
+      return;
+    }
+
+    if (agents.some((agent) => String(agent.name || '').toLowerCase() === normalizedName.toLowerCase())) {
+      setAddAgentError('Agent name already exists.');
+      return;
+    }
+
+    setIsAddingAgent(true);
+    setAddAgentError('');
+
+    const createdAgentFallback = {
+      name: normalizedName,
+      role: normalizedRole,
+      status: 'working',
+      initial: toAgentInitial(normalizedName),
+      model: normalizedModel
+    };
+
+    if (!runtimeConfig.liveDataEnabled || dataSourceMode !== 'live') {
+      setAgents((currentAgents) => [...currentAgents, createdAgentFallback]);
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent added: ${normalizedName}`,
+        detail: `Running in mock mode. ${normalizedRole} configured on ${normalizedModel}.`
+      });
+      setIsAddAgentModalOpen(false);
+      setIsAddingAgent(false);
+      return;
+    }
+
+    try {
+      const response = await postCreateAgent({
+        name: normalizedName,
+        role: normalizedRole,
+        model: normalizedModel,
+        apiKey: normalizedApiKey
+      });
+
+      if (response?.snapshot && typeof response.snapshot === 'object') {
+        applyMissionSnapshot(response.snapshot);
+      } else if (response?.agent && typeof response.agent === 'object') {
+        setAgents((currentAgents) => [...currentAgents, {
+          name: response.agent.name || createdAgentFallback.name,
+          role: response.agent.role || createdAgentFallback.role,
+          status: response.agent.status || 'working',
+          initial: response.agent.initial || toAgentInitial(response.agent.name || createdAgentFallback.name),
+          model: response.agent.model || createdAgentFallback.model
+        }]);
+      } else {
+        setAgents((currentAgents) => [...currentAgents, createdAgentFallback]);
+      }
+
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent added: ${normalizedName}`,
+        detail: `${normalizedRole} configured on ${normalizedModel} and set to working.`
+      });
+
+      setIsAddAgentModalOpen(false);
+      setAddAgentError('');
+    } catch (error) {
+      reportIntegrationError(error);
+      setAddAgentError(error?.message || 'Failed to add agent.');
+    } finally {
+      setIsAddingAgent(false);
+    }
+  };
+
+  const handleOpenEditAgentModal = (agent) => {
+    setEditingAgent(agent);
+    setEditAgentError('');
+    setIsEditAgentModalOpen(true);
+  };
+
+  const handleCloseEditAgentModal = () => {
+    if (isEditingAgent) {
+      return;
+    }
+    setIsEditAgentModalOpen(false);
+    setEditingAgent(null);
+    setEditAgentError('');
+  };
+
+  const handleEditAgent = async (agentPayload) => {
+    const agentId = agentPayload?.id || editingAgent?.id;
+    const normalizedName = normalizeAgentName(agentPayload?.name);
+    const normalizedRole = normalizeAgentName(agentPayload?.role);
+    const normalizedModel = normalizeAgentName(agentPayload?.model);
+    const normalizedApiKey = String(agentPayload?.apiKey || '').trim();
+
+    if (!normalizedName || !normalizedRole || !normalizedModel) {
+      setEditAgentError('Agent name, role, and model are required.');
+      return;
+    }
+
+    // Check for duplicate name (excluding current agent)
+    if (agents.some((agent) => 
+      String(agent.name || '').toLowerCase() === normalizedName.toLowerCase() &&
+      agent.id !== agentId
+    )) {
+      setEditAgentError('Agent name already exists.');
+      return;
+    }
+
+    setIsEditingAgent(true);
+    setEditAgentError('');
+
+    const updatedAgentFallback = {
+      ...editingAgent,
+      name: normalizedName,
+      role: normalizedRole,
+      model: normalizedModel,
+      initial: toAgentInitial(normalizedName)
+    };
+
+    if (!runtimeConfig.liveDataEnabled || dataSourceMode !== 'live') {
+      setAgents((currentAgents) =>
+        currentAgents.map((agent) =>
+          agent.id === agentId ? updatedAgentFallback : agent
+        )
+      );
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent updated: ${normalizedName}`,
+        detail: `Running in mock mode. ${normalizedRole} configured on ${normalizedModel}.`
+      });
+      setIsEditAgentModalOpen(false);
+      setEditingAgent(null);
+      setIsEditingAgent(false);
+      return;
+    }
+
+    try {
+      const response = await putUpdateAgent(agentId, {
+        name: normalizedName,
+        role: normalizedRole,
+        model: normalizedModel,
+        ...(normalizedApiKey && { apiKey: normalizedApiKey })
+      });
+
+      if (response?.snapshot && typeof response.snapshot === 'object') {
+        applyMissionSnapshot(response.snapshot);
+      } else if (response?.agent && typeof response.agent === 'object') {
+        setAgents((currentAgents) =>
+          currentAgents.map((agent) =>
+            agent.id === agentId
+              ? {
+                  ...agent,
+                  name: response.agent.name || updatedAgentFallback.name,
+                  role: response.agent.role || updatedAgentFallback.role,
+                  model: response.agent.model || updatedAgentFallback.model,
+                  initial: response.agent.initial || toAgentInitial(response.agent.name || updatedAgentFallback.name)
+                }
+              : agent
+          )
+        );
+      } else {
+        setAgents((currentAgents) =>
+          currentAgents.map((agent) =>
+            agent.id === agentId ? updatedAgentFallback : agent
+          )
+        );
+      }
+
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent updated: ${normalizedName}`,
+        detail: `${normalizedRole} configured on ${normalizedModel}.`
+      });
+
+      setIsEditAgentModalOpen(false);
+      setEditingAgent(null);
+      setEditAgentError('');
+    } catch (error) {
+      reportIntegrationError(error);
+      setEditAgentError(error?.message || 'Failed to update agent.');
+    } finally {
+      setIsEditingAgent(false);
+    }
+  };
+
+  const handleDeleteAgent = async (agent) => {
+    const agentId = agent?.id;
+    const agentName = agent?.name;
+
+    if (!agentId) {
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete agent "${agentName}"? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    setIsEditingAgent(true);
+
+    if (!runtimeConfig.liveDataEnabled || dataSourceMode !== 'live') {
+      setAgents((currentAgents) => currentAgents.filter((a) => a.id !== agentId));
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent deleted: ${agentName}`,
+        detail: 'Running in mock mode. Agent removed from roster.'
+      });
+      setIsEditingAgent(false);
+      return;
+    }
+
+    try {
+      await deleteAgentById(agentId);
+      setAgents((currentAgents) => currentAgents.filter((a) => a.id !== agentId));
+      pushTimelineEvent({
+        type: 'workflow',
+        action: `Agent deleted: ${agentName}`,
+        detail: 'Agent removed from roster.'
+      });
+    } catch (error) {
+      reportIntegrationError(error);
+      alert(`Failed to delete agent: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setIsEditingAgent(false);
+    }
   };
 
   const handleStopAllAgents = () => {
@@ -1312,7 +2050,10 @@ const MissionControl = () => {
 
   const handleResumeOperations = () => {
     setEmergencyMode(EMERGENCY_MODE.NORMAL);
-    setAgents(initialAgents.map((agent) => ({ ...agent })));
+    setAgents((currentAgents) => currentAgents.map((agent) => ({
+      ...agent,
+      status: agent.status === 'working' ? 'working' : (agent.name === 'Jarvis' ? 'awake' : 'idle')
+    })));
     pushTimelineEvent({
       type: 'workflow',
       action: 'Operations resumed',
@@ -1395,6 +2136,21 @@ const MissionControl = () => {
     setIsDarkMode(!isDarkMode);
   };
 
+  const appendChatMessage = useCallback((message) => {
+    if (!message || typeof message !== 'object') {
+      return;
+    }
+
+    setChatMessages((current) => {
+      const incomingId = normalizeMessageId(message.id);
+      if (incomingId) {
+        return mergeChatMessages(current, [message]);
+      }
+
+      return [...current, { ...message, id: `chat-${Date.now()}-${Math.random().toString(16).slice(2, 7)}` }];
+    });
+  }, []);
+
   const handleSendChatMessage = async (messageText) => {
     const userMessage = {
       id: `chat-user-${Date.now()}`,
@@ -1404,7 +2160,7 @@ const MissionControl = () => {
       time: getChatTimestamp()
     };
 
-    setChatMessages((current) => [...current, userMessage]);
+    appendChatMessage(userMessage);
 
     if (dataSourceMode === 'mock' || !runtimeConfig.liveDataEnabled) {
       const localReply = {
@@ -1415,51 +2171,46 @@ const MissionControl = () => {
         time: getChatTimestamp()
       };
 
-      setChatMessages((current) => [...current, localReply]);
+      appendChatMessage(localReply);
       return;
     }
 
     setIsSendingChat(true);
 
     try {
-      const chatResponse = await postMissionChatMessage(messageText);
+      const chatResponse = await postMissionChatMessage(messageText, {
+        author: userMessage.author,
+        messageId: userMessage.id,
+        source: 'dashboard'
+      });
       const replyPayload = chatResponse?.reply;
 
       if (replyPayload && typeof replyPayload === 'object') {
-        setChatMessages((current) => [
-          ...current,
-          {
-            id: replyPayload.id || `chat-assistant-${Date.now()}`,
-            role: replyPayload.role || 'assistant',
-            author: replyPayload.author || 'Jarvis',
-            message: replyPayload.message || '',
-            time: replyPayload.time || getChatTimestamp()
-          }
-        ]);
+        appendChatMessage({
+          id: replyPayload.id || `chat-assistant-${Date.now()}`,
+          role: replyPayload.role || 'assistant',
+          author: replyPayload.author || 'Jarvis',
+          message: replyPayload.message || '',
+          time: replyPayload.time || getChatTimestamp()
+        });
       } else if (typeof replyPayload === 'string' && replyPayload.trim()) {
-        setChatMessages((current) => [
-          ...current,
-          {
-            id: `chat-assistant-${Date.now()}`,
-            role: 'assistant',
-            author: 'Jarvis',
-            message: replyPayload,
-            time: getChatTimestamp()
-          }
-        ]);
+        appendChatMessage({
+          id: `chat-assistant-${Date.now()}`,
+          role: 'assistant',
+          author: 'Jarvis',
+          message: replyPayload,
+          time: getChatTimestamp()
+        });
       }
     } catch (error) {
       reportIntegrationError(error);
-      setChatMessages((current) => [
-        ...current,
-        {
-          id: `chat-error-${Date.now()}`,
-          role: 'system',
-          author: 'System',
-          message: 'Chat request failed because the OpenClaw backend is unreachable.',
-          time: getChatTimestamp()
-        }
-      ]);
+      appendChatMessage({
+        id: `chat-error-${Date.now()}`,
+        role: 'system',
+        author: 'System',
+        message: 'Chat request failed because the OpenClaw backend is unreachable.',
+        time: getChatTimestamp()
+      });
     } finally {
       setIsSendingChat(false);
     }
@@ -1470,7 +2221,9 @@ const MissionControl = () => {
   const assignedTasks = tasks.filter(t => t.column === 'assigned');
   const progressTasks = tasks.filter(t => t.column === 'progress');
   const reviewTasks = tasks.filter(t => t.column === 'review');
-  const awakeAgentCount = agents.filter((agent) => agent.status === 'awake').length;
+  const awakeAgentCount = agents.filter((agent) => (
+    agent.status === 'awake' || agent.status === 'working'
+  )).length;
   const dataSourceMode = connectionState.mode;
 
   return (
@@ -1485,6 +2238,7 @@ const MissionControl = () => {
         dataSourceMode={dataSourceMode}
         connectionStatus={connectionState.status}
         hasConnectionError={Boolean(connectionState.error)}
+        telegramStatus={telegramStatus}
       />
 
       <EmergencyStatusBanner mode={emergencyMode} onResumeOperations={handleResumeOperations} />
@@ -1503,6 +2257,11 @@ const MissionControl = () => {
           onClose={toggleSidebar}
           expandedMonitor={expandedMonitor}
           onToggleMonitor={handleToggleMonitor}
+          onAddAgent={handleOpenAddAgentModal}
+          onEditAgent={handleOpenEditAgentModal}
+          onDeleteAgent={handleDeleteAgent}
+          allowAgentManagement={runtimeConfig.liveDataEnabled}
+          isManagingAgents={isAddingAgent || isEditingAgent}
         />
         
         <div className="mission-board">
@@ -1594,6 +2353,9 @@ const MissionControl = () => {
         isSending={isSendingChat}
         dataSourceMode={dataSourceMode}
         connectionStatus={connectionState.status}
+        isOpen={isChatOpen}
+        onOpen={() => setIsChatOpen(true)}
+        onClose={() => setIsChatOpen(false)}
       />
 
       {selectedTask && (
@@ -1603,6 +2365,25 @@ const MissionControl = () => {
           onClose={() => setSelectedTask(null)}
           onSave={handleSaveTask}
           onDelete={handleDeleteTask}
+        />
+      )}
+
+      {isAddAgentModalOpen && (
+        <AddAgentModal
+          onClose={handleCloseAddAgentModal}
+          onSubmit={handleAddAgent}
+          isSubmitting={isAddingAgent}
+          errorMessage={addAgentError}
+        />
+      )}
+
+      {isEditAgentModalOpen && editingAgent && (
+        <EditAgentModal
+          agent={editingAgent}
+          onClose={handleCloseEditAgentModal}
+          onSubmit={handleEditAgent}
+          isSubmitting={isEditingAgent}
+          errorMessage={editAgentError}
         />
       )}
     </div>

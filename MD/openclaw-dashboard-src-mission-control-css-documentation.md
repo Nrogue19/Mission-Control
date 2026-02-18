@@ -16,7 +16,7 @@ Primary stylesheet for the React dashboard implementation in `src/`, controlling
 - Memory visualization cards/chips/graph preview styles
 - Configuration validator score, issue list, and file-status styles
 - Data source mode badges/pills and connection error banner styles
-- Full-width mission chat panel, message bubbles, compose controls, and dark-mode variants
+- Fullscreen mission chat overlay, floating launcher button, collapse control, transcript scrolling, and dark-mode variants
 - Dark mode variant selectors
 - Wider agents sidebar sizing (`clamp`) for improved text fit plus responsive mobile off-canvas width
 - Responsive breakpoints for tablet/mobile

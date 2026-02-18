@@ -1,4 +1,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+
+jest.mock('./config/runtimeConfig', () => ({
+  runtimeConfig: {
+    liveDataEnabled: false,
+    openclawApiBaseUrl: '',
+    openclawWsUrl: '',
+    requestTimeoutMs: 8000
+  }
+}));
+
 import App from './App';
 
 beforeEach(() => {
@@ -161,4 +171,29 @@ test('mission chat sends local response while in mock mode', () => {
 
   expect(screen.getAllByText(/What is the next priority\?/i).length).toBeGreaterThan(0);
   expect(screen.getByText(/Working in local mode\./i)).toBeInTheDocument();
+});
+
+test('add agent modal adds a working agent in mock mode', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /\+ add agent/i }));
+
+  fireEvent.change(screen.getByLabelText(/agent name/i), {
+    target: { value: 'Athena' }
+  });
+  fireEvent.change(screen.getByLabelText(/^role$/i), {
+    target: { value: 'Mission Planner' }
+  });
+  fireEvent.change(screen.getByLabelText(/ai model/i), {
+    target: { value: 'gpt-4.1-mini' }
+  });
+  fireEvent.change(screen.getByLabelText(/api key/i), {
+    target: { value: 'sk-test-1234567890abcd' }
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /^add agent$/i }));
+
+  expect(screen.getByText('Athena')).toBeInTheDocument();
+  expect(screen.getByText('Mission Planner')).toBeInTheDocument();
+  expect(screen.getByText(/^working$/i)).toBeInTheDocument();
 });

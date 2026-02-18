@@ -17,12 +17,16 @@ Provides a lightweight local HTTP server that mocks required OpenClaw Mission Co
 - In-memory mission task state persists move/update/delete changes across subsequent snapshot requests
 - Snapshot also includes live monitoring telemetry (`tokenUsage`, `security`, `health`) derived from OpenClaw status and mission state
 - Snapshot now includes dynamic Live Feed datasets (`feedItems`, `timelineItems`, `skillIntegrations`, `memorySpaces`, `memoryGraphLinks`, `configurationValidator`)
+- Snapshot now persists and returns mission chat transcript (`chatMessages`) so chat history survives polling refreshes and reconnects
 - Chat endpoint: `POST /api/mission-control/chat` (forwards prompt to `openclaw agent --json` and returns assistant text)
+- Chat endpoint reuses incoming client message IDs and stores outbound/inbound messages in backend mission state for deduped realtime sync
 - Emergency endpoint: `POST /api/mission-control/emergency`
+- Telegram notifications are sent for emergency actions, agent add/update/delete, and task move/update/delete events when Telegram integration is enabled
 - Realtime bootstrap event: sends `mission.snapshot` payload on socket connect
 - Task mutation endpoints are stateful (`POST /tasks/move`, `PUT /tasks/:id`, `DELETE /tasks/:id`) and validate IDs/columns
 - Task mutations broadcast realtime `mission.tasks.replace` events over WebSocket for live queue synchronization
 - Chat bridge fallback reply when CLI invocation or parsing fails
+- Telegram polling appends incoming Telegram messages into backend chat state before websocket broadcast
 - Fallback `404` JSON response for unknown routes
 
 ## Runtime Variables

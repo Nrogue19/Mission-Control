@@ -23,6 +23,7 @@ This is the quick reference index for project documentation.
 - [README-Enhanced.md](./MD/readme-enhanced-md-documentation.md)
 - [SUMMARY.md](./MD/summary-md-documentation.md)
 - [data.js](./MD/data-js-documentation.md)
+- [openclaw-custom standalone](./MD/openclaw-custom-standalone-documentation.md)
 - [openclaw-complete-preview.html](./MD/openclaw-complete-preview-html-documentation.md)
 
 ### Windsurf Rules
@@ -31,6 +32,7 @@ This is the quick reference index for project documentation.
 ### openclaw-dashboard (Project Config)
 - [.env.example](./MD/openclaw-dashboard-env-example-documentation.md)
 - [mock-backend.js](./MD/openclaw-dashboard-mock-backend-js-documentation.md)
+- [telegramService.js](./MD/openclaw-dashboard-telegram-service-js-documentation.md)
 - [.gitignore](./MD/openclaw-dashboard-gitignore-documentation.md)
 - [README.md](./MD/openclaw-dashboard-readme-md-documentation.md)
 - [package.json](./MD/openclaw-dashboard-package-json-documentation.md)

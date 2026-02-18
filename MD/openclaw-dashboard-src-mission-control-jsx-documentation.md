@@ -26,8 +26,10 @@ Main feature component for the React dashboard, handling kanban workflow UI, tas
 - Live Feed tab datasets (`feedItems`, `timelineItems`, `skillIntegrations`, `memorySpaces`, `memoryGraphLinks`, `configurationValidator`) hydrate from snapshot payloads
 - API mutation calls for emergency controls and task updates/deletes when live mode is enabled
 - Task interactions normalize task IDs to support numeric seed IDs and string-based live IDs consistently
-- Full-width mission chat section with transcript rendering and compose form
-- Chat send flow that uses live API replies when available and local fallback replies in mock mode
+- Fullscreen mission chat overlay launched from a collapsible floating button (`Open Chat`)
+- Mission chat auto-scroll behavior keeps latest messages visible while preserving transcript state between open/close
+- Snapshot hydration merges incoming chat payloads into existing transcript to avoid disappearing replies on refresh
+- Chat send flow uses live API replies when available, local fallback replies in mock mode, and deduped append logic for realtime + HTTP responses
 
 ## When to Update
 Update when dashboard interaction patterns, task flow, or layout structure changes.

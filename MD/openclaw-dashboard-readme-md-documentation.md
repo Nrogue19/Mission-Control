@@ -4,10 +4,12 @@
 `/openclaw-dashboard/README.md`
 
 ## Purpose
-Default Create React App README describing available npm scripts and general CRA guidance.
+Project README describing available npm scripts, CRA guidance, and GitHub Pages deployment for this dashboard.
 
 ## Key Contents
-- `npm start`, `npm test`, `npm run build`, `npm run eject`
+- `npm start`, `npm run start:backend`, `npm run start:live`, `npm test`, `npm run build`, `npm run eject`
+- GitHub Pages deployment setup (`homepage`, `predeploy`, `deploy`)
+- Publish steps using `npm run deploy`
 - Links to CRA documentation
 - General deployment and troubleshooting notes
 

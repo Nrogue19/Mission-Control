@@ -99,6 +99,39 @@
             background: #8b5cf6;
         }
 
+        body.dark-mode .add-agent-btn {
+            background: #1f2540;
+            border-color: #3730a3;
+            color: #c7d2fe;
+        }
+
+        body.dark-mode .add-agent-btn:hover {
+            background: #2a3254;
+        }
+
+        body.dark-mode .status-working {
+            background: #1e3a8a;
+            color: #bfdbfe;
+        }
+
+        body.dark-mode .telegram-status {
+            border-color: #374151;
+            background: #1f2937;
+            color: #d1d5db;
+        }
+
+        body.dark-mode .telegram-status.connected {
+            border-color: #14532d;
+            background: #052e16;
+            color: #86efac;
+        }
+
+        body.dark-mode .telegram-status.disconnected {
+            border-color: #7f1d1d;
+            background: #450a0a;
+            color: #fca5a5;
+        }
+
         /* Top Header */
         .top-header {
             background: white;
@@ -161,6 +194,43 @@
             display: flex;
             align-items: center;
             gap: 16px;
+        }
+
+        .telegram-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+
+        .telegram-status.connected {
+            border-color: #86efac;
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .telegram-status.disconnected {
+            border-color: #fca5a5;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .telegram-icon {
+            font-size: 10px;
+            line-height: 1;
+        }
+
+        .telegram-label {
+            line-height: 1;
         }
 
         .time-display {
@@ -277,6 +347,12 @@
             align-items: center;
         }
 
+        .sidebar-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .sidebar-title {
             font-weight: 600;
             font-size: 12px;
@@ -292,6 +368,22 @@
             border-radius: 10px;
             font-size: 11px;
             font-weight: 600;
+        }
+
+        .add-agent-btn {
+            border: 1px solid #c7d2fe;
+            background: #eef2ff;
+            color: #3730a3;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .add-agent-btn:hover {
+            background: #e0e7ff;
         }
 
         .agents-list {
@@ -360,6 +452,11 @@
         .status-idle {
             background: #f3f4f6;
             color: #6b7280;
+        }
+
+        .status-working {
+            background: #dbeafe;
+            color: #1d4ed8;
         }
 
         /* Files Section */
@@ -871,6 +968,51 @@
             padding: 12px;
         }
 
+        .mission-chat-launcher {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 1200;
+            border: 1px solid #c7d2fe;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 10px 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            box-shadow: 0 10px 24px rgba(55, 48, 163, 0.18);
+        }
+
+        .mission-chat-launcher-count {
+            min-width: 24px;
+            height: 24px;
+            padding: 0 8px;
+            border-radius: 999px;
+            background: #3730a3;
+            color: #eef2ff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .mission-chat-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(2px);
+            z-index: 1300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+        }
+
         .mission-chat-section {
             background: #ffffff;
             border-top: 1px solid #e5e7eb;
@@ -882,11 +1024,43 @@
             max-height: 320px;
         }
 
+        .mission-chat-section-fullscreen {
+            width: min(1120px, calc(100vw - 64px));
+            height: calc(100vh - 64px);
+            min-height: 0;
+            max-height: none;
+            border: 1px solid #d1d5db;
+            border-radius: 16px;
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+            gap: 16px;
+        }
+
         .mission-chat-header {
             display: flex;
             justify-content: space-between;
             gap: 12px;
             align-items: flex-start;
+        }
+
+        .mission-chat-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mission-chat-collapse-btn {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+
+        .mission-chat-collapse-btn:hover {
+            background: #eef2f7;
         }
 
         .mission-chat-title {
@@ -937,6 +1111,13 @@
             gap: 8px;
         }
 
+        .mission-chat-empty {
+            font-size: 12px;
+            color: #6b7280;
+            text-align: center;
+            padding: 24px 16px;
+        }
+
         .chat-message-row {
             display: flex;
         }
@@ -955,6 +1136,10 @@
             border-radius: 12px;
             padding: 10px 12px;
             border: 1px solid transparent;
+        }
+
+        .mission-chat-section-fullscreen .chat-message-bubble {
+            max-width: min(82%, 980px);
         }
 
         .chat-message-bubble-user {
@@ -1652,9 +1837,25 @@
                 padding: 14px 12px;
             }
 
+            .mission-chat-overlay {
+                padding: 10px;
+                align-items: stretch;
+            }
+
+            .mission-chat-section-fullscreen {
+                width: 100%;
+                height: 100%;
+                border-radius: 12px;
+            }
+
             .mission-chat-header {
                 flex-direction: column;
                 align-items: flex-start;
+            }
+
+            .mission-chat-header-actions {
+                width: 100%;
+                justify-content: space-between;
             }
 
             .chat-message-bubble {
@@ -1668,6 +1869,11 @@
 
             .mission-chat-input-row button {
                 width: 100%;
+            }
+
+            .mission-chat-launcher {
+                right: 12px;
+                bottom: 12px;
             }
 
             /* Sidebar becomes slide-out menu on mobile */
@@ -1935,6 +2141,22 @@
 
         .modal-content {
             padding: 24px;
+        }
+
+        .agent-create-error {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        body.dark-mode .agent-create-error {
+            border-color: #7f1d1d;
+            background: #3f1f26;
+            color: #fca5a5;
         }
 
         .modal-section {
@@ -2207,6 +2429,36 @@
         body.dark-mode .mission-chat-section {
             background: #252935;
             border-color: #353945;
+        }
+
+        body.dark-mode .mission-chat-overlay {
+            background: rgba(2, 6, 23, 0.78);
+        }
+
+        body.dark-mode .mission-chat-launcher {
+            background: #1f2540;
+            border-color: #3730a3;
+            color: #c7d2fe;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.55);
+        }
+
+        body.dark-mode .mission-chat-launcher-count {
+            background: #4f46e5;
+            color: #e0e7ff;
+        }
+
+        body.dark-mode .mission-chat-collapse-btn {
+            background: #1f2230;
+            border-color: #353945;
+            color: #d1d5db;
+        }
+
+        body.dark-mode .mission-chat-collapse-btn:hover {
+            background: #2d3142;
+        }
+
+        body.dark-mode .mission-chat-empty {
+            color: #9ca3af;
         }
 
         body.dark-mode .mission-chat-title {

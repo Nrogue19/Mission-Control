@@ -2,7 +2,7 @@
 
 This file tracks the current source and documentation structure for the **Openclaw Mission Board** workspace.
 
-> Excluded from tree: `openclaw-dashboard/node_modules/`, `openclaw-dashboard/.git/`
+> Excluded from tree: `openclaw-dashboard/node_modules/`, `openclaw-dashboard/.git/`, `openclaw-dashboard/build/`, `openclaw-custom/node_modules/`, `openclaw-custom/.git/`, `openclaw-custom/build/`
 
 ```text
 Openclaw Mission Board/
@@ -31,6 +31,8 @@ Openclaw Mission Board/
 │   ├── openclaw-dashboard-public-manifest-json-documentation.md
 │   ├── openclaw-dashboard-public-robots-txt-documentation.md
 │   ├── openclaw-dashboard-readme-md-documentation.md
+│   ├── openclaw-dashboard-telegram-service-js-documentation.md
+│   ├── openclaw-custom-standalone-documentation.md
 │   ├── openclaw-dashboard-src-app-css-documentation.md
 │   ├── openclaw-dashboard-src-app-js-documentation.md
 │   ├── openclaw-dashboard-src-app-test-js-documentation.md
@@ -64,10 +66,50 @@ Openclaw Mission Board/
 ├── openclaw-dashboard/
 │   ├── .env.example
 │   ├── mock-backend.js
+│   ├── telegramService.js
 │   ├── .gitignore
+│   ├── openclaw-agent-output.json
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── README.md
+│   ├── public/
+│   │   ├── favicon.ico
+│   │   ├── index.html
+│   │   ├── logo192.png
+│   │   ├── logo512.png
+│   │   ├── manifest.json
+│   │   └── robots.txt
+│   └── src/
+│       ├── App.css
+│       ├── App.js
+│       ├── App.test.js
+│       ├── MissionControl.css
+│       ├── MissionControl.jsx
+│       ├── MonitoringComponents.jsx
+│       ├── MonitoringStyles.css
+│       ├── config/
+│       │   └── runtimeConfig.js
+│       ├── data.js
+│       ├── index.css
+│       ├── index.js
+│       ├── logo.svg
+│       ├── reportWebVitals.js
+│       ├── services/
+│       │   ├── openclawApiClient.js
+│       │   └── openclawRealtime.js
+│       └── setupTests.js
+├── openclaw-custom/
+│   ├── .env
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── .openclaw-agent-secrets.json
+│   ├── .openclaw-agents.json
+│   ├── README.md
+│   ├── mock-backend.js
+│   ├── openclaw-agent-output.json
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── telegramService.js
 │   ├── public/
 │   │   ├── favicon.ico
 │   │   ├── index.html
