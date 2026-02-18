@@ -10,6 +10,7 @@ import { AddAgentModal, EditAgentModal } from './components/AgentModals';
 import { MissionChatSection } from './components/MissionChatSection';
 import { TokenUsageMonitor, SecurityDashboard, AgentHealthMonitor } from './MonitoringComponents';
 import { runtimeConfig } from './config/runtimeConfig';
+import { minimaxConfig, sendMessageToMiniMax } from './services/minimaxChat';
 import {
   fetchMissionSnapshot,
   postEmergencyAction,
@@ -1704,12 +1705,42 @@ const MissionControl = () => {
 
     appendChatMessage(userMessage);
 
+    // Check if MiniMax is configured
+    if (minimaxConfig.isConfigured()) {
+      setIsSendingChat(true);
+      try {
+        // Get conversation history for context
+        const history = chatMessages.slice(-10).map(msg => ({
+          role: msg.role,
+          message: msg.message
+        }));
+        
+        const response = await sendMessageToMiniMax(messageText, history);
+        
+        const aiReply = {
+          id: `chat-minimax-${Date.now()}`,
+          role: 'assistant',
+          author: 'Mark',
+          message: response.message,
+          time: getChatTimestamp()
+        };
+        
+        appendChatMessage(aiReply);
+        setIsSendingChat(false);
+        return;
+      } catch (error) {
+        console.error('MiniMax error:', error);
+        // Fall through to other options
+        setIsSendingChat(false);
+      }
+    }
+
     if (dataSourceMode === 'mock' || !runtimeConfig.liveDataEnabled) {
       const localReply = {
         id: `chat-local-${Date.now()}`,
         role: 'assistant',
-        author: 'Jarvis',
-        message: `Working in local mode. I captured: "${messageText}". Start the OpenClaw backend to get live responses.`,
+        author: 'Mark',
+        message: `Hi! I'm Mark 🏃\n\nI'm the AI assistant here in Mission Board! To chat with me:\n\n1. Add your MiniMax API key to the .env file\n2. Set REACT_APP_MINIMAX_API_KEY=your_key\n\nOr connect to a live OpenClaw backend.\n\nTry setting up the API and let's chat!`,
         time: getChatTimestamp()
       };
 

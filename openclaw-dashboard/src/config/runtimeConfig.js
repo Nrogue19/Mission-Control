@@ -25,5 +25,10 @@ export const runtimeConfig = {
   liveDataEnabled: parseBoolean(process.env.REACT_APP_OPENCLAW_LIVE_DATA, false),
   openclawApiBaseUrl: apiBaseUrl,
   openclawWsUrl: explicitWsUrl || inferredWsUrl,
-  requestTimeoutMs: parseNumber(process.env.REACT_APP_OPENCLAW_API_TIMEOUT_MS, 8000)
+  requestTimeoutMs: parseNumber(process.env.REACT_APP_OPENCLAW_API_TIMEOUT_MS, 8000),
+  
+  // MiniMax AI Config
+  minimaxApiKey: process.env.REACT_APP_MINIMAX_API_KEY || '',
+  minimaxModel: process.env.REACT_APP_MINIMAX_MODEL || 'minimax-portal/MiniMax-M2.5',
+  minimaxEnabled: !!process.env.REACT_APP_MINIMAX_API_KEY
 };
