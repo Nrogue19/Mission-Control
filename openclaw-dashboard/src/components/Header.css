@@ -1,0 +1,201 @@
+/* Header Styles */
+.top-header {
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.logo-text {
+    font-weight: 600;
+    font-size: 16px;
+    color: #1f2937;
+}
+
+.header-center {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1f2937;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.telegram-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid #d1d5db;
+    background: #f3f4f6;
+    color: #374151;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
+}
+
+.telegram-status.connected {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.telegram-status.disconnected {
+    border-color: #fca5a5;
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.telegram-icon {
+    font-size: 10px;
+    line-height: 1;
+}
+
+.telegram-label {
+    line-height: 1;
+}
+
+.time-display {
+    text-align: right;
+}
+
+.time-value {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.time-date {
+    font-size: 11px;
+    color: #6b7280;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-badge-live {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge-mock {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.status-badge-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    background: #10b981;
+    border-radius: 50%;
+}
+
+/* Dark Mode Toggle */
+.dark-mode-toggle {
+    width: 50px;
+    height: 26px;
+    background: #e5e7eb;
+    border-radius: 20px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+    border: none;
+    padding: 0;
+}
+
+.dark-mode-toggle.active {
+    background: #667eea;
+}
+
+.dark-mode-toggle-slider {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.dark-mode-toggle.active .dark-mode-toggle-slider {
+    transform: translateX(24px);
+}
+
+/* Dark mode overrides */
+body.dark-mode .logo-text,
+body.dark-mode .stat-number,
+body.dark-mode .time-value {
+    color: #e5e7eb;
+}
+
+body.dark-mode .stat-label,
+body.dark-mode .time-date {
+    color: #9ca3af;
+}
+
+body.dark-mode .top-header {
+    background: #252935;
+    border-bottom-color: #353945;
+}

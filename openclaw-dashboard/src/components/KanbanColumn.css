@@ -1,0 +1,91 @@
+/* Kanban Column Styles */
+.kanban-container {
+    display: flex;
+    gap: 16px;
+    height: calc(100vh - 150px);
+}
+
+.kanban-column {
+    flex: 1;
+    min-width: 300px;
+    background: #f9fafb;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+body.dark-mode .kanban-column {
+    background: #1f2230;
+}
+
+.column-header {
+    padding: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+body.dark-mode .column-header {
+    border-color: #353945;
+}
+
+.column-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #1f2937;
+}
+
+body.dark-mode .column-title {
+    color: #e5e7eb;
+}
+
+.column-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.indicator-inbox { background: #ef4444; }
+.indicator-assigned { background: #f59e0b; }
+.indicator-progress { background: #3b82f6; }
+.indicator-review { background: #8b5cf6; }
+
+.column-count {
+    background: white;
+    color: #6b7280;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+body.dark-mode .column-count {
+    background: #252935;
+    color: #9ca3af;
+}
+
+/* Drag and Drop */
+.task-card {
+    cursor: grab;
+}
+
+.task-card:active {
+    cursor: grabbing;
+}
+
+.task-card.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.kanban-column.drag-over {
+    background: #e0e7ff;
+}
+
+body.dark-mode .kanban-column.drag-over {
+    background: #2d3452;
+}

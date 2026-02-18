@@ -72,6 +72,7 @@ Openclaw Mission Board/
 │   ├── package-lock.json
 │   ├── package.json
 │   ├── README.md
+│   ├── tsconfig.json
 │   ├── public/
 │   │   ├── favicon.ico
 │   │   ├── index.html
@@ -87,6 +88,15 @@ Openclaw Mission Board/
 │       ├── MissionControl.jsx
 │       ├── MonitoringComponents.jsx
 │       ├── MonitoringStyles.css
+│       ├── components/
+│       │   ├── Header.css
+│       │   ├── KanbanColumn.css
+│       │   ├── Modal.css
+│       │   ├── Skeleton.css
+│       │   ├── Skeleton.tsx
+│       │   ├── TaskCard.css
+│       │   ├── AgentModals.tsx
+│       │   └── TaskModal.tsx
 │       ├── config/
 │       │   └── runtimeConfig.js
 │       ├── data.js
