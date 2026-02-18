@@ -116,6 +116,25 @@ body.dark-mode .add-agent-btn:hover {
     background: #7c3aed;
 }
 
+.add-mark-btn {
+    background: #10b981 !important;
+    font-size: 11px !important;
+    width: auto !important;
+    padding: 0 8px !important;
+}
+
+.add-mark-btn:hover {
+    background: #059669 !important;
+}
+
+body.dark-mode .add-mark-btn {
+    background: #10b981 !important;
+}
+
+body.dark-mode .add-mark-btn:hover {
+    background: #059669 !important;
+}
+
 .agents-list {
     flex: 1;
     overflow-y: auto;

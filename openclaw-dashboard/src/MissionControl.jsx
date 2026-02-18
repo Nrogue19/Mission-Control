@@ -408,6 +408,7 @@ const AgentsSidebar = ({
   expandedMonitor,
   onToggleMonitor,
   onAddAgent,
+  onAddMark,
   onEditAgent,
   onDeleteAgent,
   allowAgentManagement,
@@ -421,6 +422,9 @@ const AgentsSidebar = ({
         <span className="agent-count">{agents.length}</span>
         <button type="button" className="add-agent-btn" onClick={onAddAgent}>
           + Add Agent
+        </button>
+        <button type="button" className="add-agent-btn add-mark-btn" onClick={onAddMark}>
+          + Add Mark
         </button>
       </div>
     </div>
@@ -1283,6 +1287,33 @@ const MissionControl = () => {
     setIsAddAgentModalOpen(true);
   };
 
+  // Add Mark as an AI agent
+  const handleAddMark = () => {
+    const markAgent = {
+      id: `agent-mark-${Date.now()}`,
+      name: 'Mark',
+      role: 'AI Assistant',
+      model: 'MiniMax-M2.5',
+      status: 'working',
+      initial: 'M',
+      isAI: true,  // Flag to identify AI agents
+      personality: 'Direct, competent, occasionally cheeky. Use emoji 🏃. Casual with banter, formal for business. Always try to give best outcome.'
+    };
+    
+    // Check if Mark already exists
+    if (agents.some(a => a.name === 'Mark')) {
+      alert('Mark is already added!');
+      return;
+    }
+    
+    setAgents(prev => [...prev, markAgent]);
+    pushTimelineEvent({
+      type: 'workflow',
+      action: 'Agent added: Mark',
+      detail: 'MiniMax AI assistant added to the team!'
+    });
+  };
+
   const handleCloseAddAgentModal = () => {
     if (isAddingAgent) {
       return;
@@ -1831,6 +1862,7 @@ const MissionControl = () => {
           expandedMonitor={expandedMonitor}
           onToggleMonitor={handleToggleMonitor}
           onAddAgent={handleOpenAddAgentModal}
+          onAddMark={handleAddMark}
           onEditAgent={handleOpenEditAgentModal}
           onDeleteAgent={handleDeleteAgent}
           allowAgentManagement={runtimeConfig.liveDataEnabled}
