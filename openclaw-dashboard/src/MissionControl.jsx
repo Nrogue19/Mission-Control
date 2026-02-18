@@ -893,6 +893,29 @@ const LiveFeed = ({ items, timelineItems, skillIntegrations, memorySpaces, memor
   );
 };
 
+// LocalStorage keys
+const AGENTS_STORAGE_KEY = 'openclaw.agents';
+const TASKS_STORAGE_KEY = 'openclaw.tasks';
+
+// Load from localStorage
+const loadFromStorage = (key, fallback) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+// Save to localStorage
+const saveToStorage = (key, data) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to save to localStorage:', e);
+  }
+};
+
 // Main Mission Control Component
 const MissionControl = () => {
   const shouldUseSeedData = !runtimeConfig.liveDataEnabled;
@@ -901,9 +924,32 @@ const MissionControl = () => {
   const [date, setDate] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [overlayActive, setOverlayActive] = useState(false);
-  const [agents, setAgents] = useState(() => (shouldUseSeedData ? initialAgents : []));
+  
+  // Load agents from localStorage or use seed data
+  const [agents, setAgents] = useState(() => {
+    if (shouldUseSeedData) {
+      const stored = loadFromStorage(AGENTS_STORAGE_KEY, null);
+      return stored || initialAgents;
+    }
+    return [];
+  });
+  
+  // Save agents to localStorage when they change (in mock mode)
+  useEffect(() => {
+    if (shouldUseSeedData) {
+      saveToStorage(AGENTS_STORAGE_KEY, agents);
+    }
+  }, [agents, shouldUseSeedData]);
+  
   const [files, setFiles] = useState(() => (shouldUseSeedData ? initialFiles : []));
-  const [tasks, setTasks] = useState(() => (shouldUseSeedData ? initialTasks : []));
+  const [tasks, setTasks] = useState(() => loadFromStorage(TASKS_STORAGE_KEY, shouldUseSeedData ? initialTasks : []));
+  
+  // Save tasks to localStorage when they change (in mock mode)
+  useEffect(() => {
+    if (shouldUseSeedData) {
+      saveToStorage(TASKS_STORAGE_KEY, tasks);
+    }
+  }, [tasks, shouldUseSeedData]);
   const [feedItems, setFeedItems] = useState(() => (shouldUseSeedData ? initialFeedItems : []));
   const [chatMessages, setChatMessages] = useState(() => (shouldUseSeedData ? initialMissionChat : []));
   const [timelineItems, setTimelineItems] = useState(() => (shouldUseSeedData ? initialAuditTimeline : []));
@@ -1282,6 +1328,7 @@ const MissionControl = () => {
     setAddAgentError('');
 
     const createdAgentFallback = {
+      id: `agent-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       name: normalizedName,
       role: normalizedRole,
       status: 'working',
