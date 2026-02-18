@@ -150,6 +150,17 @@ body.dark-mode .add-mark-btn:hover {
     background: #2563eb;
 }
 
+.clean-mode-notice {
+    padding: 20px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.clean-mode-notice p {
+    margin: 0;
+}
+
 .agents-list {
     flex: 1;
     overflow-y: auto;

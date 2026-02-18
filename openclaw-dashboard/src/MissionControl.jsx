@@ -440,23 +440,31 @@ const AgentsSidebar = ({
         />
       ))}
     </div>
-    <FilesSection files={files} onFileView={onFileView} />
-    <TokenUsageMonitor
-      data={tokenUsageData}
-      isExpanded={expandedMonitor === 'token'}
-      onToggle={() => onToggleMonitor('token')}
-    />
-    <SecurityDashboard
-      data={securityData}
-      isExpanded={expandedMonitor === 'security'}
-      onToggle={() => onToggleMonitor('security')}
-    />
-    <AgentHealthMonitor
-      agents={agents}
-      data={healthData}
-      isExpanded={expandedMonitor === 'health'}
-      onToggle={() => onToggleMonitor('health')}
-    />
+    {runtimeConfig.cleanMode ? (
+      <div className="clean-mode-notice">
+        <p>👋 Add agents and tasks to get started!</p>
+      </div>
+    ) : (
+      <>
+        <FilesSection files={files} onFileView={onFileView} />
+        <TokenUsageMonitor
+          data={tokenUsageData}
+          isExpanded={expandedMonitor === 'token'}
+          onToggle={() => onToggleMonitor('token')}
+        />
+        <SecurityDashboard
+          data={securityData}
+          isExpanded={expandedMonitor === 'security'}
+          onToggle={() => onToggleMonitor('security')}
+        />
+        <AgentHealthMonitor
+          agents={agents}
+          data={healthData}
+          isExpanded={expandedMonitor === 'health'}
+          onToggle={() => onToggleMonitor('health')}
+        />
+      </>
+    )}
   </div>
 );
 
@@ -936,6 +944,7 @@ const MissionControl = () => {
       const stored = loadFromStorage(AGENTS_STORAGE_KEY, null);
       return stored || initialAgents;
     }
+    // In clean mode or live mode, start empty
     return [];
   });
   
