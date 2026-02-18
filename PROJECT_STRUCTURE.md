@@ -96,6 +96,9 @@ Openclaw Mission Board/
 │       │   ├── Skeleton.tsx
 │       │   ├── TaskCard.css
 │       │   ├── AgentModals.tsx
+│       │   ├── ErrorBoundary.css
+│       │   ├── ErrorBoundary.tsx
+│       │   ├── MissionChatSection.tsx
 │       │   └── TaskModal.tsx
 │       ├── config/
 │       │   └── runtimeConfig.js
