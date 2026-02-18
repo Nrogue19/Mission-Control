@@ -1876,6 +1876,13 @@ const MissionControl = () => {
               <span className={`data-source-pill data-source-pill-${dataSourceMode}`}>
                 {dataSourceMode === 'live' ? 'Live data' : 'Mock data'}
               </span>
+              <button 
+                className="chat-toggle-btn" 
+                onClick={() => setIsChatOpen(!isChatOpen)}
+                title="Toggle Chat"
+              >
+                💬 Chat
+              </button>
               {isInteractionLocked && <span className="interaction-lock-pill">Interaction locked</span>}
             </div>
             {connectionState.error && (
