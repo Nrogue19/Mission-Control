@@ -78,8 +78,8 @@ export const AddAgentModal: React.FC<AgentModalProps> = ({ onClose, onSubmit, is
               <input
                 id="agent-name-input"
                 type="text"
-modal-input"
-                               className=" value={formState.name}
+                className="modal-input"
+                value={formState.name}
                 onChange={(event) => handleChange('name', event.target.value)}
                 placeholder="e.g. Athena"
                 required
